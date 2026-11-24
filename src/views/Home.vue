@@ -359,80 +359,81 @@
         <span class="detail-label">备注</span>
         <p>{{ detailOrder.note }}</p>
       </div>
-
-      <!-- 订单日志 -->
-      <div class="detail-log-section">
-        <div class="log-pane-header">
-          <span class="log-pane-title">订单日志</span>
-          <div class="log-pane-tools">
-            <span
-              v-if="Array.isArray(statusLogs) && statusLogs.length"
-              class="log-pane-count"
-            >
-              {{ statusLogs.length }} 条
-            </span>
-            <el-button
-              size="small"
-              :loading="statusLoading"
-              :icon="Refresh"
-              @click="refreshStatusLog"
-            >
-              刷新
-            </el-button>
           </div>
-        </div>
+        </el-tab-pane>
 
-        <div v-if="statusLoading" class="progress-loading">
-          <el-icon class="is-loading">
-            <Loading />
-          </el-icon>
-          <span>正在获取处理记录...</span>
-        </div>
-
-        <div
-          v-else-if="Array.isArray(statusLogs) && statusLogs.length"
-          class="order-log-wrap"
-        >
-          <div class="order-flow">
-            <div
-              v-for="(row, index) in statusLogRows"
-              :key="index"
-              class="order-flow-item"
-              :class="`is-${row.level}`"
-            >
-              <div class="order-flow-node">
-                <span class="order-flow-circle">
-                  <el-icon v-if="row.level === 'success'">
-                    <Check />
-                  </el-icon>
-                  <el-icon v-else-if="row.level === 'error'">
-                    <CircleCloseFilled />
-                  </el-icon>
-                  <el-icon v-else-if="row.level === 'warn'">
-                    <Warning />
-                  </el-icon>
-                  <i v-else class="order-flow-dot"></i>
-                </span>
+        <el-tab-pane label="订单日志" name="log" class="detail-tab-pane">
+          <div class="detail-log-section">
+            <div class="log-pane-header">
+              <span class="log-pane-title">订单日志</span>
+              <div class="log-pane-tools">
                 <span
-                  v-if="index < statusLogRows.length - 1"
-                  class="order-flow-line"
-                ></span>
-              </div>
-
-              <div class="order-flow-body">
-                <p class="order-flow-text">{{ row.text }}</p>
-                <span class="order-flow-time">{{ row.time }}</span>
+                  v-if="Array.isArray(statusLogs) && statusLogs.length"
+                  class="log-pane-count"
+                >
+                  {{ statusLogs.length }} 条
+                </span>
+                <el-button
+                  size="small"
+                  :loading="statusLoading"
+                  :icon="Refresh"
+                  @click="refreshStatusLog"
+                >
+                  刷新
+                </el-button>
               </div>
             </div>
-          </div>
 
-          <div class="order-log-foot">
-            已显示全部 {{ statusLogs.length }} 条记录
-          </div>
-        </div>
+            <div v-if="statusLoading" class="progress-loading">
+              <el-icon class="is-loading">
+                <Loading />
+              </el-icon>
+              <span>正在获取处理记录...</span>
+            </div>
 
-        <el-empty v-else description="暂无处理过程" :image-size="70" />
-      </div>
+            <div
+              v-else-if="Array.isArray(statusLogs) && statusLogs.length"
+              class="order-log-wrap"
+            >
+              <div class="order-flow">
+                <div
+                  v-for="(row, index) in statusLogRows"
+                  :key="index"
+                  class="order-flow-item"
+                  :class="`is-${row.level}`"
+                >
+                  <div class="order-flow-node">
+                    <span class="order-flow-circle">
+                      <el-icon v-if="row.level === 'success'">
+                        <Check />
+                      </el-icon>
+                      <el-icon v-else-if="row.level === 'error'">
+                        <CircleCloseFilled />
+                      </el-icon>
+                      <el-icon v-else-if="row.level === 'warn'">
+                        <Warning />
+                      </el-icon>
+                      <i v-else class="order-flow-dot"></i>
+                    </span>
+                    <span
+                      v-if="index < statusLogRows.length - 1"
+                      class="order-flow-line"
+                    ></span>
+                  </div>
+
+                  <div class="order-flow-body">
+                    <p class="order-flow-text">{{ row.text }}</p>
+                    <span class="order-flow-time">{{ row.time }}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="order-log-foot">
+                已显示全部 {{ statusLogs.length }} 条记录
+              </div>
+            </div>
+
+            <el-empty v-else description="暂无处理过程" :image-size="70" />
           </div>
         </el-tab-pane>
 
@@ -5923,7 +5924,7 @@ onBeforeUnmount(
 }
 
 .order-flow {
-  max-height: 430px;
+  max-height: 100%;
   padding: 2px 4px 0 0;
   overflow-y: auto;
   overflow-x: hidden;
