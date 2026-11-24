@@ -176,6 +176,59 @@
         </div>
       </section>
 
+      <!-- 卡密商品：展示后端从卡库抽出的卡密 -->
+      <section
+        v-if="detailOrder.camis?.length"
+        class="detail-section"
+      >
+        <div class="detail-section-header">
+          <div class="detail-section-title">
+            <span class="detail-section-mark"></span>
+            卡密信息
+          </div>
+          <span class="detail-section-caption">卡号 / 卡密 / 卡库 / 有效期</span>
+        </div>
+
+        <div class="detail-camis-list">
+          <div
+            v-for="(card, cardIndex) in detailOrder.camis"
+            :key="cardIndex"
+            class="detail-camis-item"
+          >
+            <div class="detail-camis-head">
+              <span class="detail-camis-index">卡密 {{ cardIndex + 1 }}</span>
+              <div class="detail-camis-actions">
+                <el-button type="primary" link @click="copyText(card.card_no)">
+                  复制卡号
+                </el-button>
+                <el-button type="primary" link @click="copyText(card.card_password)">
+                  复制卡密
+                </el-button>
+              </div>
+            </div>
+
+            <div class="detail-grid detail-grid-rows">
+              <div class="detail-item">
+                <span class="detail-label">卡号</span>
+                <strong class="detail-camis-value">{{ card.card_no || '-' }}</strong>
+              </div>
+              <div class="detail-item">
+                <span class="detail-label">卡密</span>
+                <strong class="detail-camis-value">{{ card.card_password || '-' }}</strong>
+              </div>
+              <div class="detail-item">
+                <span class="detail-label">卡库名称</span>
+                <strong>{{ card.card_name || '-' }}</strong>
+              </div>
+              <div class="detail-item">
+                <span class="detail-label">有效期至</span>
+                <strong>{{ card.expire_time || '-' }}</strong>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <!-- ==================================================
            充值订单列表
            ================================================== -->
@@ -1979,6 +2032,9 @@ async function openDetailDialog(item, tab = 'detail') {
       dealerNo: data.merchantOrder?.dealerNo || '',
       createTime: data.createdAt || data.created_at || item.createTime || '',
 
+      // 卡密商品：后端从卡库抽出的卡密（可能是数组或 JSON 字符串）
+      camis: normalizeCamis(data.camis),
+
       // 财务流水
       outerFinance: financeList
     }
@@ -2467,6 +2523,23 @@ async function copyText(text) {
   } catch (e) {
     ElMessage.error('复制失败')
   }
+}
+
+/**
+ * 卡密数据可能以数组或 JSON 字符串返回，统一规范成数组，
+ * 供订单详情里的「卡密信息」区块渲染。
+ */
+function normalizeCamis(value) {
+  if (Array.isArray(value)) return value
+  if (typeof value === 'string' && value.trim()) {
+    try {
+      const parsed = JSON.parse(value)
+      return Array.isArray(parsed) ? parsed : [parsed]
+    } catch (e) {
+      return []
+    }
+  }
+  return []
 }
 
 /* ==================================================
@@ -5498,6 +5571,46 @@ onBeforeUnmount(
 .detail-section-caption {
   font-size: 11px;
   color: var(--app-text-muted);
+}
+
+/* 卡密信息：多张卡逐条展示，卡号/卡密用等宽字体便于核对与复制 */
+.detail-camis-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 0 6px;
+}
+
+.detail-camis-item {
+  border: 1px solid var(--app-border);
+  border-radius: 12px;
+  background: var(--app-bg-subtle);
+  padding: 10px 14px 0;
+}
+
+.detail-camis-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 0 6px;
+}
+
+.detail-camis-index {
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--app-accent);
+}
+
+.detail-camis-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.detail-camis-value {
+  font-family: 'SF Mono', 'Cascadia Code', Consolas, 'Courier New', monospace;
+  letter-spacing: 0.02em;
 }
 
 .detail-grid {
