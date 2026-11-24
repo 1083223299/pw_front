@@ -24,15 +24,13 @@ jobs:
       matrix:
         include:
           # Apple Silicon（M 系列芯片）产物
-          # macos-14 已于 2026-11-02 退役，改用 macos-15
-          - runner: macos-15
+          - runner: macos-14
             arch: arm64
             artifact: mac-arm64
           # Intel 芯片产物
-          # macos-13 已于 2025-12-04 退役，GitHub 目前唯一的 x86_64 镜像标签是
-          # macos-15-intel（官方支持到 2027 年 8 月）。
-          # 如果 Intel 这条 job 排队过久，删掉这三行即可，只保留 arm64 产物。
-          - runner: macos-15-intel
+          # 注意：GitHub 的 macos-13 是最后一个 Intel runner，已被官方标记为逐步退役。
+          # 如果这条 job 因 runner 下线而失败，删掉这三行即可，只保留 arm64 产物。
+          - runner: macos-13
             arch: x64
             artifact: mac-x64
 

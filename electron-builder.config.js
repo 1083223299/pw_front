@@ -21,13 +21,4 @@ module.exports = {
     ...packageJson.build.nsis,
     shortcutName: `充值中心${shortcutSuffix}`,
   },
-  mac: {
-    ...packageJson.build.mac,
-    // macOS 图标最小 512x512，这里单独用 build/icon-mac.png（1024），
-    // 不改动 Windows 使用的 build/icon.png（256）和 build/icon.ico
-    icon: 'build/icon-mac.png',
-    // ad-hoc 自签（无证书）时不启用 hardened runtime：
-    // 开了会要求 JIT 等 entitlements，未公证的包更容易被系统拦下
-    hardenedRuntime: false,
-  },
 };
