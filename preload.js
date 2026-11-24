@@ -13,6 +13,8 @@ contextBridge.exposeInMainWorld('windowControls', {
 });
 
 contextBridge.exposeInMainWorld('appInfo', {
+  // 渲染进程据此区分 macOS / Windows 的窗口外观（macOS 走系统原生红黄绿按钮）
+  platform: process.platform,
   reportEnv: (info) => ipcRenderer.send('app:report-env', info),
   openLogsDir: () => ipcRenderer.invoke('app:open-logs-dir'),
   openUserData: () => ipcRenderer.invoke('app:open-userdata'),

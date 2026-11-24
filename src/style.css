@@ -302,6 +302,20 @@ body.desktop-app {
     border-radius: 0 0 var(--app-workbench-radius) var(--app-workbench-radius);
 }
 
+/* macOS：窗口已由系统裁出圆角并投射阴影，自绘圆角/描边会造成双层边框，这里全部抹平 */
+body.platform-mac #app:has(> .desktop-titlebar) {
+    border-radius: 0;
+    border: 0;
+}
+
+body.platform-mac .desktop-titlebar {
+    border-radius: 0;
+}
+
+body.platform-mac .desktop-content {
+    border-radius: 0;
+}
+
 .desktop-content > .admin-layout {
     height: 100%;
     min-height: 0;

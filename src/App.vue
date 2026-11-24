@@ -47,6 +47,8 @@ function handleWindowFocus() {
 
 onMounted(() => {
   if (isDesktop) document.body.classList.add('desktop-app');
+  // macOS：窗口圆角/投影/红黄绿按钮由系统绘制，样式上需要去掉自绘的圆角与描边
+  if (window.appInfo?.platform === 'darwin') document.body.classList.add('platform-mac');
   // 应用外观主题，并监听系统深浅色变化（仅跟随系统模式时生效）
   applyTheme(prefs.themeMode);
   removeSystemThemeListener = watchSystemTheme(
@@ -105,6 +107,7 @@ watch(
 
 onUnmounted(() => {
   document.body.classList.remove('desktop-app');
+  document.body.classList.remove('platform-mac');
   window.removeEventListener('focus', handleWindowFocus);
   if (typeof removeOpenNotifyListener === 'function') removeOpenNotifyListener();
   if (typeof removeSystemThemeListener === 'function') removeSystemThemeListener();

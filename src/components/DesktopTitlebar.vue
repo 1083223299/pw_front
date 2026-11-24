@@ -1,9 +1,5 @@
 <template>
   <header class="desktop-titlebar" @dblclick="toggleMaximize">
-    <div class="titlebar-brand">
-      <span v-if="CURRENT_ENV !== ENV_NAMES.PROD" class="environment-badge">{{ config.name }}环境</span>
-    </div>
-
     <div class="titlebar-actions" @dblclick.stop>
       <button
         class="titlebar-action"
@@ -37,7 +33,7 @@
       </button>
     </div>
 
-    <div class="window-controls" @dblclick.stop>
+    <div v-if="!isMac" class="window-controls" @dblclick.stop>
       <button class="window-button" type="button" title="最小化" @click="minimize">
         <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 6h8" /></svg>
       </button>
@@ -66,11 +62,12 @@
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { Bell, Coin, Refresh } from '@element-plus/icons-vue';
-import { config, CURRENT_ENV, ENV_NAMES } from '@/config/env';
 import SettingsPanel from '@/components/SettingsPanel.vue';
 import { useNotifyStore } from '@/stores/notify';
 
 const controls = window.windowControls;
+// macOS 用系统原生红黄绿按钮（左上角），自绘三键只在 Windows 显示
+const isMac = window.appInfo?.platform === 'darwin';
 const router = useRouter();
 const notify = useNotifyStore();
 const isMaximized = ref(false);
@@ -134,25 +131,6 @@ onBeforeUnmount(() => {
   box-shadow: 0 1px 2px var(--app-bg-mask);
   user-select: none;
   -webkit-app-region: drag;
-}
-
-.titlebar-brand {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  min-width: 0;
-  padding-left: 14px;
-  color: var(--app-text-secondary);
-  font-size: 12px;
-}
-
-.environment-badge {
-  padding: 2px 7px;
-  border-radius: 5px;
-  color: #f59e0b;
-  background: rgba(180, 83, 9, 0.15);
-  font-size: 10px;
-  font-weight: 600;
 }
 
 .titlebar-actions {

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, screen, dialog, Notification } = require('electron');
+const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, screen, dialog, Notification, nativeTheme } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const packageMetadata = require('./package.json');
@@ -409,6 +409,7 @@ function showMainWindow() {
 
 function createWindow() {
   const savedState = readWindowState();
+  const isMac = process.platform === 'darwin';
   const options = {
     width: 1440,
     height: 900,
@@ -427,6 +428,16 @@ function createWindow() {
       backgroundThrottling: false,
     },
   };
+
+  if (isMac) {
+    // macOS：窗口圆角、投影和左上角红黄绿按钮都交给系统绘制，
+    // 只隐藏标题栏背景，内容依然铺满整窗，业务侧的 36px 标题栏继续自绘。
+    options.frame = true;
+    options.transparent = false;
+    options.titleBarStyle = 'hiddenInset';
+    options.trafficLightPosition = { x: 16, y: 12 };
+    options.backgroundColor = nativeTheme.shouldUseDarkColors ? '#1c1d21' : '#f2f3f5';
+  }
 
   if (savedState) {
     options.x = savedState.x;
@@ -917,6 +928,35 @@ function setupNotifyIpc() {
   });
 }
 
+/**
+ * macOS 顶部菜单栏：补齐系统惯例的「应用菜单 / 编辑菜单 / 窗口菜单」。
+ * Windows 不设置，保持原有的无菜单条（Alt 也不唤出）行为。
+ */
+function setupMacApplicationMenu() {
+  if (process.platform !== 'darwin') return;
+  const template = [
+    {
+      label: '充值中心',
+      submenu: [
+        { role: 'about', label: '关于充值中心' },
+        { type: 'separator' },
+        { role: 'hide', label: '隐藏充值中心' },
+        { role: 'hideOthers', label: '隐藏其他' },
+        { role: 'unhide', label: '全部显示' },
+        { type: 'separator' },
+        { role: 'quit', label: '退出充值中心' },
+      ],
+    },
+    {
+      label: '文件',
+      submenu: [{ role: 'close', label: '关闭窗口' }],
+    },
+    { role: 'editMenu' },
+    { role: 'windowMenu' },
+  ];
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
 function setupIpc() {
   ipcMain.on('window:minimize', (event) => {
     if (isMainWindowSender(event)) mainWindow.minimize();
@@ -1008,6 +1048,7 @@ if (!gotTheLock) {
     setupAutoUpdater();
     scheduleAutoCheck();
     setupIpc();
+    setupMacApplicationMenu();
     createWindow();
     createTray();
 
