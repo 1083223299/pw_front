@@ -1,0 +1,15 @@
+{
+  // 避免 VS Code 去读取/监视 Electron 打包产物（app.asar 达 90MB+），
+  // 否则会长期持有句柄，导致 npm run dist:prod 的 release-lock 检查一直阻断。
+  "files.watcherExclude": {
+    "**/release/**": true,
+    "**/release-build/**": true,
+    "**/release-prod/**": true,
+    "**/node_modules/**": true
+  },
+  "search.exclude": {
+    "**/release": true,
+    "**/release-build": true,
+    "**/release-prod": true
+  }
+}

@@ -4,6 +4,7 @@ node_modules/
 dist/
 # Electron 打包发布目录
 release/
+release-build/
 release-prod/
 # 日志文件
 *.log
