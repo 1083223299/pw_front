@@ -100,7 +100,11 @@
       "icon": "build/icon.icns",
       "category": "public.app-category.business",
       "hardenedRuntime": true,
-      "notarize": false
+      "notarize": false,
+      "extendInfo": {
+        "CFBundleDisplayName": "充值中心",
+        "CFBundleName": "充值中心"
+      }
     }
   }
 }
