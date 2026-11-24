@@ -1,5 +1,6 @@
 const path = require('path');
 const fs = require('fs');
+const { execFileSync } = require('child_process');
 const packageJson = require('../package.json');
 
 /** 写入自动更新读取的本地元数据；更新地址仍沿用 package.json.build.publish，不改动业务配置。 */
@@ -25,6 +26,20 @@ function writeAppUpdateYml(context) {
  * 当前 rcedit 在部分环境中一次提交两类资源会报 Unable to commit changes。
  */
 module.exports = async function afterPack(context) {
+  // macOS：没有 Developer ID 证书时做 ad-hoc 自签。
+  // 苹果芯片（arm64）要求可执行文件必须带有效签名，否则安装后提示
+  // “已损坏，无法打开”。ad-hoc 签名（codesign -s -）即可满足这一要求，
+  // 用户侧不再需要手动跑 xattr / codesign 命令。
+  if (context.electronPlatformName === 'darwin') {
+    const appInfo = context.packager.appInfo;
+    const appBundle = path.join(context.appOutDir, `${appInfo.productFilename}.app`);
+    execFileSync('codesign', ['--force', '--deep', '--sign', '-', appBundle], {
+      stdio: 'inherit',
+    });
+    console.log(`已完成 macOS ad-hoc 签名：${appBundle}`);
+    return;
+  }
+
   if (context.electronPlatformName !== 'win32') return;
 
   const rcedit = require('rcedit');
