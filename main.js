@@ -110,6 +110,9 @@ function readSettings() {
       settings = {
         autoLaunch: saved.autoLaunch !== undefined ? !!saved.autoLaunch : true,
         autoUpdate: saved.autoUpdate !== undefined ? !!saved.autoUpdate : true,
+        // 记录上次已成功写入系统的自启状态；用于避免 macOS 每次启动重复注册登录项
+        autoLaunchApplied:
+          saved.autoLaunchApplied === undefined ? null : !!saved.autoLaunchApplied,
       };
     }
   } catch {
@@ -129,18 +132,32 @@ function writeSettings(patch) {
   return settings;
 }
 
-/** 应用开机自启系统设置。 */
-function applyAutoLaunch(enable) {
+/** 应用开机自启系统设置。force=false 表示启动时的同步，仅在状态不一致时才写入。 */
+function applyAutoLaunch(enable, options = {}) {
+  const force = !!options.force;
   try {
     if (process.platform === 'win32') {
-      const options = { openAtLogin: enable, args: ['--hidden'] };
+      const loginOptions = { openAtLogin: enable, args: ['--hidden'] };
       if (!app.isPackaged) {
-        options.path = process.execPath;
-        options.args = ['--hidden', app.getAppPath()];
+        loginOptions.path = process.execPath;
+        loginOptions.args = ['--hidden', app.getAppPath()];
       }
-      app.setLoginItemSettings(options);
+      app.setLoginItemSettings(loginOptions);
+      writeSettings({ autoLaunchApplied: enable });
     } else if (process.platform === 'darwin') {
-      app.setLoginItemSettings({ openAtLogin: enable, openAsHidden: true });
+      // macOS 13+ 每次调用 setLoginItemSettings 都会重新注册登录项，
+      // 系统随之弹出“登录项已添加”通知。因此这里先读当前状态：
+      // 1) 系统已是目标状态，直接跳过；
+      // 2) 非用户主动操作时，若上次已写过同一状态就不再重复写（防止每次启动都弹）。
+      const current = app.getLoginItemSettings().openAtLogin;
+      if (current === enable) {
+        if (settings.autoLaunchApplied !== enable) writeSettings({ autoLaunchApplied: enable });
+        return;
+      }
+      if (!force && settings.autoLaunchApplied === enable) return;
+      // openAsHidden 在 macOS 13+ 已失效，不再传
+      app.setLoginItemSettings({ openAtLogin: enable });
+      writeSettings({ autoLaunchApplied: enable });
     }
   } catch (error) {
     console.error('[settings] 设置开机自启失败:', error.message);
@@ -253,7 +270,8 @@ function setupSettingsIpc() {
   ipcMain.handle('settings:set-auto-launch', (_event, enable) => {
     const enabled = !!enable;
     writeSettings({ autoLaunch: enabled });
-    applyAutoLaunch(enabled);
+    // 用户主动切换，允许强制写入系统登录项
+    applyAutoLaunch(enabled, { force: true });
     return getSettingsState();
   });
 
