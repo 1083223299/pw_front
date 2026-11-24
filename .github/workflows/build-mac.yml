@@ -1,0 +1,76 @@
+name: Build macOS
+
+# 说明：
+# Windows 本地打不出 macOS 安装包，这个流程用 GitHub 的 macOS runner 完成
+# “生产 Web 构建 + electron-builder 出 dmg/zip”这一段，产物以 artifact 形式下载。
+#
+# 触发方式：
+#   1. 仓库 Actions 页面手动运行（workflow_dispatch）
+#   2. 推送 v 开头的 tag，例如 v1.0.0
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-mac:
+    name: 打包 macOS (${{ matrix.artifact }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      # 两个架构分开跑：Intel 芯片用 x64，Apple 芯片用 arm64。
+      # 分开跑是因为 artifactName 里没有 ${arch}，同一次构建两个架构会互相覆盖同名文件。
+      matrix:
+        include:
+          # Apple Silicon（M 系列芯片）产物
+          - runner: macos-14
+            arch: arm64
+            artifact: mac-arm64
+          # Intel 芯片产物
+          # 注意：GitHub 的 macos-13 是最后一个 Intel runner，已被官方标记为逐步退役。
+          # 如果这条 job 因 runner 下线而失败，删掉这三行即可，只保留 arm64 产物。
+          - runner: macos-13
+            arch: x64
+            artifact: mac-x64
+
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v4
+
+      - name: 配置 Node
+        uses: actions/setup-node@v4
+        with:
+          # 与本地开发环境保持一致，避免 lock 文件里的依赖解析差异
+          node-version: 22
+          cache: npm
+
+      - name: 安装依赖
+        run: npm ci
+
+      - name: 生产构建并打包 dmg/zip
+        # dist:mac = npm run build:prod + electron-builder --mac
+        # 追加 --arm64 / --x64 指定目标架构，避免 runner 默认架构带来的不确定性
+        #
+        # CSC_IDENTITY_AUTO_DISCOVERY=false：runner 上没有 Developer ID 证书，
+        # 关掉自动探测让 electron-builder 直接跳过签名，否则会因找不到证书报错中断。
+        # 这样产出的 dmg 是未签名包，用户首次打开需要右键“打开”或执行
+        # xattr -cr /Applications/充值中心.app
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: npm run dist:mac -- --${{ matrix.arch }}
+
+      - name: 查看产物
+        run: ls -lh release
+
+      - name: 上传安装包
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          # dmg 给用户安装；zip 和 latest-mac.yml 给 electron-updater 做自动更新用
+          path: |
+            release/*.dmg
+            release/*.zip
+            release/latest-mac.yml
+          if-no-files-found: error
+          retention-days: 14

@@ -1,0 +1,11 @@
+# 依赖目录
+node_modules/
+# 前端打包产物
+dist/
+# Electron 打包发布目录
+release/
+release-prod/
+# 日志文件
+*.log
+# macOS 系统垃圾文件
+.DS_Store
