@@ -36,6 +36,12 @@ contextBridge.exposeInMainWorld('settingsBridge', {
   },
 });
 
+// 凭据加密桥：桌面端用系统级 safeStorage 加密「记住密码」，渲染进程只接触密文
+contextBridge.exposeInMainWorld('secureStore', {
+  encrypt: (text) => ipcRenderer.invoke('secure:encrypt', text),
+  decrypt: (cipher) => ipcRenderer.invoke('secure:decrypt', cipher),
+});
+
 // 通知中心与托盘桥接：主进程只接收规范化后的通知状态，不直接访问业务接口。
 contextBridge.exposeInMainWorld('notifyBridge', {
   notifyIncoming: (payload) => ipcRenderer.send('notify:incoming', payload),

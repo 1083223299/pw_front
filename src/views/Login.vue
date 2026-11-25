@@ -111,6 +111,15 @@
 
             </el-form-item>
 
+            <!-- 记住密码 -->
+            <div class="login-extra">
+
+              <el-checkbox v-model="rememberPassword" :disabled="loading">记住密码</el-checkbox>
+
+              <span class="login-extra-hint">仅保存在本机</span>
+
+            </div>
+
             <!-- 登录 -->
             <el-button type="primary" size="large" class="login-button" :loading="loading" @click="handleLogin">
               <span v-if="!loading">登录</span>
@@ -133,7 +142,7 @@
 </template>
 
 <script setup>
-import { reactive, ref } from 'vue'
+import { onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {User, Lock, DataAnalysis,} from '@element-plus/icons-vue'
@@ -141,16 +150,34 @@ import { useAuthStore } from '@/stores/auth'
 import logoUrl from '@/assets/images/logo-brand.png'
 import { login } from '../api/api.js'
 import {encryptPassword} from '../api/utils.js'
+import { clearCredential, loadSavedCredential, saveCredential } from '@/utils/credentials'
 
 const router = useRouter()
 const authStore = useAuthStore()
 
 const formRef = ref(null)
 const loading = ref(false)
+// 记住密码：勾选后账号与密码保存在本机，下次打开自动回填
+const rememberPassword = ref(false)
 
 const form = reactive({
   username: '',
   password: '',
+})
+
+// 打开登录页时回填上次记住的账号与密码
+onMounted(async () => {
+  const saved = await loadSavedCredential()
+  if (saved.username) form.username = saved.username
+  if (saved.remembered) {
+    rememberPassword.value = true
+    if (saved.password) form.password = saved.password
+  }
+})
+
+// 取消勾选立刻清掉本机凭据，避免下次打开仍被自动填充
+watch(rememberPassword, (enabled) => {
+  if (!enabled) clearCredential()
 })
 
 const rules = {
@@ -194,6 +221,13 @@ async function handleLogin() {
     }
 
     authStore.setLogin(res)
+
+    // 按「记住密码」勾选状态保存或清除本机凭据
+    if (rememberPassword.value) {
+      await saveCredential(form.username, form.password)
+    } else {
+      clearCredential()
+    }
 
     ElMessage.success('登录成功')
     await router.replace('/admin/home')
@@ -429,6 +463,34 @@ async function handleLogin() {
   box-shadow:
       0 0 0 1px var(--app-accent) inset,
       0 0 0 3px var(--app-accent-soft);
+}
+
+/* =========================
+   记住密码
+========================= */
+.login-extra {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: -6px 0 16px;
+}
+
+.login-extra :deep(.el-checkbox) {
+  height: 22px;
+}
+
+.login-extra :deep(.el-checkbox__label) {
+  font-size: 13px;
+  color: var(--app-text-muted);
+}
+
+.login-extra :deep(.el-checkbox__input.is-checked + .el-checkbox__label) {
+  color: var(--app-text-secondary);
+}
+
+.login-extra-hint {
+  font-size: 12px;
+  color: var(--app-text-placeholder);
 }
 
 /* =========================

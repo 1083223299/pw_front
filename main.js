@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, screen, dialog, Notification, nativeTheme } = require('electron');
+const { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, screen, dialog, Notification, nativeTheme, safeStorage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const packageMetadata = require('./package.json');
@@ -1028,6 +1028,25 @@ function setupIpc() {
     if (!mainWindow || mainWindow.isDestroyed()) return { ok: false };
     await mainWindow.webContents.session.clearCache();
     return { ok: true };
+  });
+
+  // 登录「记住密码」：用系统级凭据加密（Windows DPAPI / macOS Keychain）保存密码。
+  // 渲染进程只拿到密文，解密也只能在本机当前用户下完成。
+  ipcMain.handle('secure:encrypt', (_event, text) => {
+    try {
+      if (!safeStorage.isEncryptionAvailable()) return { ok: false, error: 'encryption-unavailable' };
+      return { ok: true, data: safeStorage.encryptString(String(text)).toString('base64') };
+    } catch (error) {
+      return { ok: false, error: String(error?.message || error) };
+    }
+  });
+  ipcMain.handle('secure:decrypt', (_event, cipher) => {
+    try {
+      if (!safeStorage.isEncryptionAvailable()) return { ok: false, error: 'encryption-unavailable' };
+      return { ok: true, data: safeStorage.decryptString(Buffer.from(String(cipher), 'base64')) };
+    } catch (error) {
+      return { ok: false, error: String(error?.message || error) };
+    }
   });
 
   setupNotifyIpc();

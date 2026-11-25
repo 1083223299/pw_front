@@ -5032,8 +5032,12 @@ onBeforeUnmount(
   font-weight: 600;
 }
 
-.row-action--detail:hover {
-  background: var(--app-accent);
+/* 详情按钮悬浮：必须带三层选择器，
+   否则会被 Element Plus 的 .el-button.is-link:not(.is-disabled):hover 抢走背景与边框，
+   变成透明底 + 白字（浅色模式下等于看不见） */
+.table-shell .table-row .row-action--detail:hover,
+.table-shell .table-row .row-action--detail:active {
+  background-color: var(--app-accent);
   border-color: var(--app-accent);
   color: var(--app-accent-contrast);
 }
