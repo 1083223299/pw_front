@@ -102,7 +102,8 @@
       "hardenedRuntime": true,
       "notarize": false,
       "extendInfo": {
-        "CFBundleDisplayName": "充值中心"
+        "CFBundleDisplayName": "充值中心",
+        "CFBundleName": "充值中心"
       }
     }
   }
