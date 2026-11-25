@@ -566,7 +566,7 @@ function applyTrayIcon() {
   // 不叠加彩色红点，未读条数交给 Dock 数字角标和 tooltip，这符合 Mac 应用惯例。
   const isMac = process.platform === 'darwin';
   if (isMac) {
-    if (trayNormalIcon) tray.setImage(trayNormalIcon);
+    if (trayNormalIcon) tray.setImage(normalizeTrayImage(trayNormalIcon));
   } else {
     const badgeImage = notifyBadgeImage && !notifyBadgeImage.isEmpty() ? notifyBadgeImage : null;
     if (badgeImage) {
@@ -1021,6 +1021,22 @@ function setupIpc() {
   setupSettingsIpc();
 }
 
+// macOS 菜单栏图标固定 16pt（@2x 为 32px）。素材 logo-template.png 是 96×96，
+// Electron 会按图片原始像素绘制，结果在菜单栏里显示得明显比旁边的图标大一圈，
+// 所以这里统一缩到 16pt 再交给 Tray。
+const MAC_TRAY_SIZE = 16;
+
+/** macOS 菜单栏图标统一缩放到 16pt；其它平台原样返回。 */
+function normalizeTrayImage(image) {
+  if (!image || image.isEmpty()) return image;
+  if (process.platform !== 'darwin') return image;
+  const { width } = image.getSize();
+  if (width <= MAC_TRAY_SIZE) return image;
+  const resized = image.resize({ width: MAC_TRAY_SIZE, height: MAC_TRAY_SIZE, quality: 'best' });
+  resized.setTemplateImage(true);
+  return resized;
+}
+
 function createTray() {
   // Windows 用 32px 彩色图（16px 源图放到托盘尺寸边缘会发虚）；
   // macOS 菜单栏用单色模板图，由系统按深浅色自动反色，深色菜单栏才看得清。
@@ -1033,7 +1049,10 @@ function createTray() {
     isMac ? 'logo-template.png' : 'logo32.png'
   );
   trayNormalIcon = nativeImage.createFromPath(iconPath);
-  if (isMac) trayNormalIcon.setTemplateImage(true);
+  if (isMac) {
+    trayNormalIcon = normalizeTrayImage(trayNormalIcon);
+    trayNormalIcon.setTemplateImage(true);
+  }
   tray = new Tray(trayNormalIcon);
   tray.setToolTip('充值中心');
   tray.setContextMenu(Menu.buildFromTemplate([
