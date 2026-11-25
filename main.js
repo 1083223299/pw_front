@@ -18,13 +18,26 @@ if (APP_ENV !== 'prod') {
   app.setPath('userData', path.join(app.getPath('appData'), `pw-esports-recharge-${APP_ENV}`));
 }
 
-// macOS 包名显示为“充值中心”（CFBundleName/CFBundleDisplayName），Electron 会拿它当应用名，
-// 从而把 userData 指向 “~/Library/Application Support/充值中心”。这里直接固定目录，
-// 让设置、日志、窗口状态仍落在原来的 pwEsportsRecharge 目录，升级后不丢配置。
-// 注意不要用 app.setName()：那样会连带把 Dock / 菜单栏里的应用名改回英文。
+// macOS 程序坞 / 菜单栏显示中文“充值中心”：只改运行时应用名，
+// 不动 Info.plist 的 CFBundleName（包名保持 ASCII，避免影响启动与签名校验）。
+// setName 会把 userData 指向 “~/Library/Application Support/充值中心”，
+// 所以紧接着把 userData 显式固定回 pwEsportsRecharge，升级后设置、日志、窗口状态都不丢。
 if (process.platform === 'darwin' && APP_ENV === 'prod') {
+  app.setName('充值中心');
   app.setPath('userData', path.join(app.getPath('appData'), 'pwEsportsRecharge'));
 }
+
+// 启动诊断：把启动进度追加到 userData/launch.log，用于定位“双击后立即意外退出”。
+// 如果该文件里只有 start 一行，说明崩溃发生在主进程 JavaScript 之外（原生/签名层）。
+const LAUNCH_LOG = path.join(app.getPath('userData'), 'launch.log');
+const markLaunch = (stage) => {
+  try {
+    fs.appendFileSync(LAUNCH_LOG, `${new Date().toISOString()} ${stage}\n`);
+  } catch (e) {
+    // 诊断日志写不进去也不影响正常启动
+  }
+};
+markLaunch('start');
 
 const log = require('electron-log');
 log.transports.file.level = 'info';
@@ -1079,6 +1092,7 @@ if (!gotTheLock) {
   app.on('second-instance', showMainWindow);
 
   app.whenReady().then(async () => {
+    markLaunch('ready');
     if (!DEV_SERVER_URL) {
       const { startLocalServer } = require('./localServer');
       const local = await startLocalServer({
@@ -1096,6 +1110,7 @@ if (!gotTheLock) {
     setupMacApplicationMenu();
     createWindow();
     createTray();
+    markLaunch('tray');
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();
