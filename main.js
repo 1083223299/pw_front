@@ -18,6 +18,14 @@ if (APP_ENV !== 'prod') {
   app.setPath('userData', path.join(app.getPath('appData'), `pw-esports-recharge-${APP_ENV}`));
 }
 
+// macOS 的 Info.plist 里 CFBundleDisplayName 是“充值中心”，Electron 会拿它当应用名，
+// 进而把 userData 指向 “~/Library/Application Support/充值中心”。为保证设置/日志/窗口状态
+// 仍落在原来的 pwEsportsRecharge 目录（不因改显示名而丢配置），这里显式固定应用名。
+// 仅 darwin：Windows 的用户目录本来就等于 productName，无需改动。
+if (process.platform === 'darwin') {
+  app.setName('pwEsportsRecharge');
+}
+
 const log = require('electron-log');
 log.transports.file.level = 'info';
 log.transports.file.maxSize = 10 * 1024 * 1024;
