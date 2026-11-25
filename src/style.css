@@ -451,6 +451,59 @@ html.dark .el-message-box {
     background: var(--app-text-muted);
 }
 
+/* 订单详情抽屉：头部固定，Tab 栏固定，仅内容区滚动（与原详情弹窗结构一致） */
+.detail-drawer.el-drawer {
+    display: flex;
+    flex-direction: column;
+}
+
+.detail-drawer .el-drawer__header {
+    flex-shrink: 0;
+    margin: 0;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--app-border);
+    color: var(--app-text-primary);
+}
+
+.detail-drawer .el-drawer__body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    padding: 16px 20px 18px;
+}
+
+.detail-drawer .detail-tabs {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.detail-drawer .detail-tabs .el-tabs__header {
+    flex-shrink: 0;
+}
+
+.detail-drawer .detail-tabs .el-tabs__content {
+    flex: 1;
+    min-height: 0;
+    padding-right: 6px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: var(--app-border) transparent;
+}
+
+.detail-drawer .detail-tabs .el-tabs__content::-webkit-scrollbar {
+    width: 6px;
+}
+
+.detail-drawer .detail-tabs .el-tabs__content::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: var(--app-border);
+}
+
 /* 充值进度：只滚动正文，标题及刷新按钮保持固定 */
 .progress-dialog > .el-dialog__body {
     overflow-y: auto;

@@ -4,6 +4,8 @@
     <router-view />
   </div>
   <NotifyBubbleHost />
+  <!-- 全局回到顶部：所有页面下滚较深时出现在右下角 -->
+  <BackToTop />
   <UpdateDialog />
 </template>
 
@@ -12,6 +14,7 @@ import { onMounted, onUnmounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import DesktopTitlebar from '@/components/DesktopTitlebar.vue';
 import NotifyBubbleHost from '@/components/NotifyBubbleHost.vue';
+import BackToTop from '@/components/BackToTop.vue';
 import UpdateDialog from '@/components/UpdateDialog.vue';
 import { useNotifyStore } from '@/stores/notify';
 import { usePreferencesStore } from '@/stores/preferences';

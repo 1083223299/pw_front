@@ -2,14 +2,37 @@
   <!-- ==================================================
      订单详情
      ================================================== -->
-  <el-dialog
+  <el-drawer
       v-model="detailDialogVisible"
-      width="700px"
+      :size="detailDrawerSize"
+      direction="rtl"
       destroy-on-close
-      class="detail-dialog fixed-body-dialog"
-      align-center
-      title="订单详情"
+      class="detail-drawer"
   >
+    <!-- 抽屉头部：标题 + 当前页内上一单/下一单切换 -->
+    <template #header>
+      <div class="detail-drawer-header">
+        <span class="detail-drawer-title">订单详情</span>
+
+        <div class="detail-drawer-nav">
+          <el-button
+              size="small"
+              :disabled="!detailNav.prev"
+              @click="openDetailDialog(detailNav.prev)"
+          >
+            上一单
+          </el-button>
+
+          <el-button
+              size="small"
+              :disabled="!detailNav.next"
+              @click="openDetailDialog(detailNav.next)"
+          >
+            下一单
+          </el-button>
+        </div>
+      </div>
+    </template>
     <!-- 加载中 -->
     <div
         v-if="detailLoading"
@@ -510,7 +533,7 @@
         :image-size="90"
     />
 
-  </el-dialog>
+  </el-drawer>
 
   <div class="home-page">
 
@@ -764,51 +787,93 @@
           <el-button type="primary" :icon="Search" @click="searchOrders">查询</el-button>
           <el-button :icon="RefreshLeft" @click="resetFilters">重置</el-button>
 
+          <!-- 列表密度切换：单行压缩，方便一屏多看几单 -->
+          <el-tooltip
+              :content="compactMode ? '切换到舒适行高' : '切换到紧凑行高'"
+              placement="top"
+          >
+            <el-button class="density-toggle" @click="toggleCompactDensity">
+              {{ compactMode ? '舒适' : '紧凑' }}
+            </el-button>
+          </el-tooltip>
+
         </div>
 
       </div>
 
 
       <!-- =========================
-           滚动区域
+           表格区
+           纵向滚动仍由页面承担，横向滚动在 .order-scroll 内；
+           表头因此单独提到滚动容器外（吸顶），滚动时同步 scrollLeft 与表体对齐
            ========================= -->
-      <div
-          ref="orderScrollRef"
-          class="order-scroll"
-      >
+      <div class="table-shell" :class="{ 'is-compact': compactMode }">
 
-        <!-- =========================
-             PC 表格
-             ========================= -->
-        <div class="desktop-table">
-
-          <div class="table-header">
-            <div class="col order-col">订单信息</div>
-            <div class="col platform-col">平台</div>
-            <div class="col tenant-col">租户</div>
-            <div class="col account-col">充值账号</div>
-            <div class="col amount-col">充值金额</div>
-            <div class="col status-col">状态</div>
-            <div class="col step-col">执行进度</div>
-            <div class="col time-col">创建时间</div>
-            <div class="col action-col">操作</div>
+        <!-- 吸顶表头 -->
+        <div class="table-sticky-head">
+          <div ref="tableHeadRef" class="table-head-inner">
+            <div class="table-header">
+              <div class="col order-col">订单信息</div>
+              <div class="col platform-col">平台</div>
+              <div class="col tenant-col">租户</div>
+              <div class="col account-col">充值账号</div>
+              <div class="col amount-col">充值金额</div>
+              <div class="col status-col">状态</div>
+              <div class="col step-col">执行进度</div>
+              <div class="col time-col">创建时间</div>
+              <div class="col action-col">操作</div>
+            </div>
           </div>
+        </div>
 
+        <!-- 横向滚动主体 -->
+        <div
+            ref="orderScrollRef"
+            class="order-scroll"
+            @scroll="syncTableHeadScroll"
+        >
+
+          <!-- =========================
+               PC 表格
+               ========================= -->
+          <div class="desktop-table">
 
           <div
               v-for="item in filteredOrders"
               :key="item.id"
               class="table-row"
+              :class="{ 'is-active': activeOrderId === item.id }"
+              @click="openDetailDialog(item)"
           >
 
-            <!-- 订单 -->
+            <!-- 订单：前缀弱化、尾号加亮，尾号区悬停可复制 -->
             <div class="col order-col">
 
               <div class="order-main">
-                <span class="order-no">{{ item.orderNo }}</span>
+                <span class="order-no" :title="item.orderNo">
+                  <span class="code-prefix">{{ item.orderNoPrefix }}</span><span class="code-tail">{{ item.orderNoTail }}</span>
+                  <el-icon
+                      class="copy-icon"
+                      title="复制主订单号"
+                      @click.stop="copyText(item.orderNo)"
+                  >
+                    <CopyDocument />
+                  </el-icon>
+                </span>
+
                 <div class="order-sub-info">
                   <span>ID {{ item.id }}</span>
-                  <span v-if="item.subOrderId">子单 {{ item.subOrderId }}</span>
+
+                  <span v-if="item.subOrderId" class="sub-order-line" :title="item.subOrderId">
+                    子单<span class="code-prefix">{{ item.subOrderIdPrefix }}</span><span class="code-tail">{{ item.subOrderIdTail }}</span>
+                    <el-icon
+                        class="copy-icon"
+                        title="复制子单号"
+                        @click.stop="copyText(item.subOrderId)"
+                    >
+                      <CopyDocument />
+                    </el-icon>
+                  </span>
                 </div>
 
               </div>
@@ -826,18 +891,26 @@
             </div>
 
 
-            <!-- 账号 -->
+            <!-- 账号：悬停可复制 -->
             <div class="col account-col">
               <div class="account">
-                {{ item.account || '-' }}
+                <span class="account-text" :title="item.account || '-'">{{ item.account || '-' }}</span>
+                <el-icon
+                    v-if="item.account"
+                    class="copy-icon"
+                    title="复制充值账号"
+                    @click.stop="copyText(item.account)"
+                >
+                  <CopyDocument />
+                </el-icon>
               </div>
             </div>
 
 
-            <!-- 金额 -->
+            <!-- 金额：右对齐，整数突出、小数弱化，四位精度完整保留 -->
             <div class="col amount-col">
-              <strong class="amount">
-                ¥{{ Number(item.amount ?? 0).toFixed(4) }}
+              <strong class="amount" :title="`¥${Number(item.amount ?? 0).toFixed(4)}`">
+                <span class="amount-yen">¥</span><span class="amount-int">{{ item.amountInt }}</span><span class="amount-frac-main">{{ item.amountFracMain }}</span><span class="amount-frac-zero">{{ item.amountFracZero }}</span>
               </strong>
             </div>
 
@@ -896,25 +969,32 @@
               <!--              </el-button>-->
               <el-button
                   v-if="item.externalStatus === 0 && item.meoStatus === 1 && item.statusValue === 1"
+                  class="row-action row-action--push"
                   type="success"
                   link
                   :loading="pushingId === item.id"
                   :disabled="pushingId === item.id"
-                  @click="handlePushExecute(item)"
+                  @click.stop="handlePushExecute(item)"
               >
                 {{ pushingId === item.id ? '推送中...' : '推送执行' }}
               </el-button>
 
-              <el-button type="info" link @click="openDetailDialog(item)">
+              <el-button
+                  class="row-action row-action--detail"
+                  type="primary"
+                  link
+                  @click.stop="openDetailDialog(item)"
+              >
                 详情
               </el-button>
               <!-- 仅充值中显示矫正按钮 -->
               <el-button
                   v-if="item.status === 'processing'"
+                  class="row-action row-action--correct"
                   type="warning"
                   link
                   :loading="correctingId === item.id"
-                  @click="handleCorrectResult(item)"
+                  @click.stop="handleCorrectResult(item)"
               >
                 矫正结果
               </el-button>
@@ -1059,21 +1139,24 @@
 
         </div>
 
+        </div><!-- /.order-scroll -->
 
-        <div class="home-pagination" v-if="listTotal > 0">
-          <span class="pagination-total">共 {{ listTotal }} 条订单</span>
-          <el-pagination
-              v-model:current-page="page"
-              v-model:page-size="pageSize"
-              :page-sizes="[10, 20, 50, 100]"
-              :total="listTotal"
-              layout="sizes, prev, pager, next, jumper"
-              background
-              @current-change="handlePageChange"
-              @size-change="handlePageSizeChange"
-          />
-        </div>
+      <!-- 分页栏：移出横向滚动容器，横向滚动时保持不动 -->
+      <div class="home-pagination" v-if="listTotal > 0">
+        <span class="pagination-total">共 {{ listTotal }} 条订单</span>
+        <el-pagination
+            v-model:current-page="page"
+            v-model:page-size="pageSize"
+            :page-sizes="[10, 20, 50, 100]"
+            :total="listTotal"
+            layout="sizes, prev, pager, next, jumper"
+            background
+            @current-change="handlePageChange"
+            @size-change="handlePageSizeChange"
+        />
       </div>
+
+      </div><!-- /.table-shell -->
 
     </section>
 
@@ -1570,6 +1653,7 @@ import {
   RefreshLeft,
   ArrowRight,
   DataBoard,
+  CopyDocument,
 } from '@element-plus/icons-vue'
 
 import {
@@ -1725,6 +1809,56 @@ const refreshing = ref(false)
    滚动
    ================================================== */
 const orderScrollRef = ref(null)
+
+/* 吸顶表头：位于横向滚动容器之外，靠 scrollLeft 同步位置 */
+const tableHeadRef = ref(null)
+
+/* 列表密度：紧凑 / 舒适，记到本地，下次进来自动恢复 */
+const DENSITY_STORAGE_KEY = 'home_table_density'
+const compactMode = ref(false)
+
+/* 当前查看（或刚查看过）的订单行：关闭详情后仍保留高亮 */
+const activeOrderId = ref(null)
+
+let tableHeadFrame = 0
+
+/**
+ * 表头与表体横向对齐：
+ * 表体在 .order-scroll 里横向滚动，表头在容器外，用反向位移抵消
+ */
+function syncTableHeadScroll() {
+  if (tableHeadFrame) return
+
+  tableHeadFrame = requestAnimationFrame(() => {
+    tableHeadFrame = 0
+
+    const scrollEl = orderScrollRef.value
+    const headEl = tableHeadRef.value
+
+    if (!scrollEl || !headEl) return
+
+    // 表头宽度跟随表体内容宽度，避免列错位
+    headEl.style.width = `${scrollEl.scrollWidth}px`
+    headEl.style.transform = `translateX(${-scrollEl.scrollLeft}px)`
+  })
+}
+
+/* 切换列表密度 */
+function toggleCompactDensity() {
+  compactMode.value = !compactMode.value
+
+  try {
+    localStorage.setItem(
+        DENSITY_STORAGE_KEY,
+        compactMode.value ? 'compact' : 'comfort'
+    )
+  } catch (e) {
+    console.error('保存列表密度失败:', e)
+  }
+
+  // 行高变了，表头需要重新对齐宽度
+  syncTableHeadScroll()
+}
 /* ==================================================
    下拉刷新
    ================================================== */
@@ -1876,6 +2010,30 @@ const detailAutoPush = ref(true)
 const detailActiveTab = ref('detail')
 const repushLoading = ref(false)
 
+/* 详情抽屉宽度：约 56% 窗口宽，限制在 520px–860px，窄屏直接铺满 */
+const viewportWidth = ref(window.innerWidth)
+const detailDrawerSize = computed(() => {
+  if (viewportWidth.value < 900) return '100%'
+
+  const width = Math.round(
+      Math.max(520, Math.min(860, viewportWidth.value * 0.56))
+  )
+
+  return `${width}px`
+})
+
+/* 当前页内的上一单 / 下一单，用于抽屉头部快速连查 */
+const detailNav = computed(() => {
+  const list = filteredOrders.value
+  const index = list.findIndex((item) => item.id === detailListItem.value?.id)
+
+  return {
+    index,
+    prev: index > 0 ? list[index - 1] : null,
+    next: index >= 0 && index < list.length - 1 ? list[index + 1] : null,
+  }
+})
+
 const statusCorrectLoading = ref(false)
 const statusCorrectForm = ref({
   status: 2,
@@ -1947,8 +2105,16 @@ async function locateOrderByQuery() {
   }
 }
 
+/* 详情请求序号：连续切换上一单/下一单时，丢弃过期响应，避免详情串单 */
+let detailRequestSeq = 0
+
 async function openDetailDialog(item, tab = 'detail') {
   if (!item) return
+
+  const requestSeq = ++detailRequestSeq
+
+  // 记录当前查看的行，关闭详情后回到列表仍然高亮
+  activeOrderId.value = item.id
 
   detailDialogVisible.value = true
   detailListItem.value = item
@@ -1960,6 +2126,9 @@ async function openDetailDialog(item, tab = 'detail') {
 
   try {
     const data = await getOrderDetail(item.id, item.tenantId)
+
+    // 期间又切换了别的订单，本次响应作废
+    if (requestSeq !== detailRequestSeq) return
 
     if (!data?.id) {
       throw new Error('订单详情不存在')
@@ -2044,10 +2213,15 @@ async function openDetailDialog(item, tab = 'detail') {
     loadDetailLogs(detailOrder.value)
 
   } catch (error) {
+    // 已经切到别的订单，过期请求不再提示
+    if (requestSeq !== detailRequestSeq) return
+
     console.error('获取订单详情失败:', error)
     ElMessage.error(error?.message || '获取订单详情失败')
   } finally {
-    detailLoading.value = false
+    if (requestSeq === detailRequestSeq) {
+      detailLoading.value = false
+    }
   }
 }
 
@@ -2557,12 +2731,22 @@ async function fetchStatusLogs(order) {
 
 async function loadDetailLogs(order) {
   statusLoading.value = true
+
+  // 记住发起时的序号：期间切换了订单就丢弃这次日志，避免日志串单
+  const requestSeq = detailRequestSeq
+
   try {
-    await fetchStatusLogs(order)
+    const data = await getOrderStatusLogs(order.orderNo, order.tenantId)
+
+    if (requestSeq !== detailRequestSeq) return
+
+    statusLogs.value = Array.isArray(data) ? data : []
   } catch (error) {
     console.error('获取订单日志失败:', error)
   } finally {
-    statusLoading.value = false
+    if (requestSeq === detailRequestSeq) {
+      statusLoading.value = false
+    }
   }
 }
 
@@ -2764,6 +2948,41 @@ function getStepTitle(step) {
 
 
 /* ==================================================
+   列表展示辅助：单号拆段、金额拆整数与小数
+   ================================================== */
+
+/**
+ * 单号拆分：时间戳前缀弱化，后 6 位尾号高亮，方便人工核对
+ */
+function splitCodeTail(value, tailLength = 6) {
+  const code = String(value || '')
+
+  if (code.length <= tailLength) {
+    return { prefix: '', tail: code }
+  }
+
+  return {
+    prefix: code.slice(0, code.length - tailLength),
+    tail: code.slice(code.length - tailLength),
+  }
+}
+
+/**
+ * 金额拆分：始终保留四位小数，仅把末尾连续的 0 弱化显示（不隐藏精确值）
+ */
+function splitAmountParts(value) {
+  const fixed = Number(value ?? 0).toFixed(4)
+  const [intPart, fracPart = '0000'] = fixed.split('.')
+  const trimmed = fracPart.replace(/0+$/, '')
+
+  return {
+    int: intPart,
+    fracMain: trimmed ? `.${trimmed}` : '',
+    fracZero: trimmed ? fracPart.slice(trimmed.length) : `.${fracPart}`,
+  }
+}
+
+/* ==================================================
    格式化订单
    ================================================== */
 
@@ -2772,6 +2991,11 @@ function formatOrder(item) {
   const meoStep = Number(
       item.meo_step || 0
   )
+
+  // 列表展示用：单号拆前后段、金额拆整数与小数
+  const orderNoParts = splitCodeTail(item.order_id || '')
+  const subOrderParts = splitCodeTail(item.sub_order_id || '')
+  const amountParts = splitAmountParts(item.order_price ?? 0)
 
   return {
 
@@ -2859,6 +3083,17 @@ function formatOrder(item) {
 
     number:
         item.number || '',
+
+    // 主单号 / 子单号拆分：前缀弱化、尾号高亮
+    orderNoPrefix: orderNoParts.prefix,
+    orderNoTail: orderNoParts.tail,
+    subOrderIdPrefix: subOrderParts.prefix,
+    subOrderIdTail: subOrderParts.tail,
+
+    // 金额拆分：整数放大、小数弱化，四位精度完整保留
+    amountInt: amountParts.int,
+    amountFracMain: amountParts.fracMain,
+    amountFracZero: amountParts.fracZero,
 
     faceAmount:
         Number(
@@ -4044,6 +4279,11 @@ function getDefaultDateRange() {
    Resize
    ================================================== */
 function handleResize() {
+  // 抽屉宽度按窗口宽度计算
+  viewportWidth.value = window.innerWidth
+
+  // 窗口宽度变化会改变横向滚动量，重新对齐吸顶表头
+  syncTableHeadScroll()
 }
 
 
@@ -4053,6 +4293,13 @@ function handleResize() {
 
 onMounted(async () => {
   updateTime()
+
+  // 恢复上次选择的列表密度
+  try {
+    compactMode.value = localStorage.getItem(DENSITY_STORAGE_KEY) === 'compact'
+  } catch (e) {
+    console.error('读取列表密度失败:', e)
+  }
 
   // 先恢复上次的查询条件
   const saved = loadFilters()
@@ -4089,6 +4336,9 @@ onMounted(async () => {
   stopQueryWatch = watch(() => route.query, locateOrderByQuery)
 
   window.addEventListener('resize', handleResize)
+
+  // 首屏渲染后对齐一次吸顶表头
+  syncTableHeadScroll()
 })
 
 
@@ -4338,7 +4588,8 @@ onBeforeUnmount(
    ================================================== */
 
 .orders-card {
-  overflow: hidden;
+  /* clip 只裁剪不产生滚动容器，否则内部表头无法吸顶 */
+  overflow: clip;
   background: var(--app-bg-elevated);
   border: 1px solid #e7ecf3;
   border-radius: 20px;
@@ -4457,22 +4708,67 @@ onBeforeUnmount(
 
 .desktop-table {
   width: 100%;
-  min-width: 1440px;
+  /* 列宽总和 1336 + 左右 padding 44 = 1380，与表头保持一致 */
+  min-width: 1380px;
+}
+
+/* ==================================================
+   吸顶表头 / 列表密度
+   ================================================== */
+.table-shell {
+  position: relative;
+}
+
+/* 表头位于横向滚动容器之外，粘贴在页面滚动容器顶部 */
+.table-sticky-head {
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  overflow: hidden;
+  border-bottom: 1px solid var(--app-border);
+  background: var(--app-table-header-bg);
+}
+
+.table-head-inner {
+  min-width: 1380px;
+  will-change: transform;
+}
+
+/* 吸顶后表头自身不再重复画底边 */
+.table-shell .table-header {
+  height: 46px;
+  background: transparent;
+  border-bottom: 0;
+}
+
+/* 紧凑模式：单行压缩 */
+.table-shell.is-compact .table-row {
+  min-height: 56px;
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+
+.table-shell.is-compact .table-header {
+  height: 38px;
+}
+
+.table-shell.is-compact .order-sub-info {
+  font-size: 9px;
 }
 
 .table-header,
 .table-row {
   display: grid;
   grid-template-columns:
-    210px
-    100px
-    90px
-    160px
-    110px
-    140px
-    180px
-    180px
-    220px;
+    240px
+    84px
+    72px
+    168px
+    112px
+    132px
+    152px
+    168px
+    208px;
   align-items: center;
   column-gap: 0;
   padding: 0 22px;
@@ -4496,6 +4792,13 @@ onBeforeUnmount(
   border-bottom: 1px solid var(--app-border-light);
   background: var(--app-bg-elevated);
   transition: background 0.18s ease;
+  cursor: pointer;
+}
+
+/* 正在查看/刚查看过的订单：左侧竖条 + 同款底色，关闭详情后不丢位置 */
+.table-row.is-active {
+  background: var(--app-accent-soft);
+  box-shadow: inset 3px 0 0 var(--app-accent);
 }
 
 .table-row:nth-child(odd) {
@@ -4567,11 +4870,54 @@ onBeforeUnmount(
 }
 
 .order-no {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
   font-size: 13px;
   line-height: 1.45;
   font-weight: 600;
   color: var(--app-text-primary);
   overflow-wrap: anywhere;
+}
+
+/* 单号：时间戳前缀弱化，后 6 位尾号加亮，人工核对时不容易看花 */
+.code-prefix {
+  color: var(--app-text-muted);
+  font-weight: 500;
+  letter-spacing: 0.2px;
+}
+
+.code-tail {
+  color: var(--app-text-primary);
+  font-weight: 700;
+  letter-spacing: 0.4px;
+}
+
+/* 复制图标：默认隐藏，悬停整行才出现，避免一屏全是图标 */
+.copy-icon {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 4px;
+  font-size: 13px;
+  color: var(--app-text-muted);
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity 0.15s ease, color 0.15s ease;
+}
+
+.table-row:hover .copy-icon {
+  opacity: 1;
+}
+
+.copy-icon:hover {
+  color: var(--app-accent-strong);
+}
+
+/* 子单号行 */
+.sub-order-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
 }
 
 .order-sub-info {
@@ -4590,9 +4936,15 @@ onBeforeUnmount(
 }
 
 .account {
+  display: flex;
+  align-items: center;
   min-width: 0;
   font-size: 13px;
   color: var(--app-text-regular);
+}
+
+.account-text {
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -4603,6 +4955,31 @@ onBeforeUnmount(
   font-variant-numeric: tabular-nums;
   color: var(--app-text-primary);
   white-space: nowrap;
+}
+
+/* 金额：整数突出，小数弱化，四位精度始终完整显示 */
+.amount-yen {
+  margin-right: 1px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--app-text-muted);
+}
+
+.amount-int {
+  font-weight: 700;
+}
+
+.amount-frac-main {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--app-text-secondary);
+}
+
+.amount-frac-zero {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--app-text-muted);
+  opacity: 0.7;
 }
 
 .create-time {
@@ -4631,6 +5008,34 @@ onBeforeUnmount(
   flex-direction: column;
   align-items: flex-start;
   justify-content: center;
+}
+
+/* 金额右对齐，便于竖排比对 */
+.table-row .amount-col,
+.table-header .amount-col {
+  justify-content: flex-end;
+}
+
+/* 操作列靠右收口 */
+.table-row .action-col,
+.table-header .action-col {
+  justify-content: flex-end;
+}
+
+/* 详情按钮：主色幽灵按钮，深色底上不再有"禁用感" */
+.row-action--detail {
+  padding: 3px 10px;
+  border: 1px solid var(--app-accent-border);
+  border-radius: 6px;
+  background: var(--app-accent-soft);
+  color: var(--app-accent-strong);
+  font-weight: 600;
+}
+
+.row-action--detail:hover {
+  background: var(--app-accent);
+  border-color: var(--app-accent);
+  color: var(--app-accent-contrast);
 }
 
 .order-status-group {
@@ -5434,6 +5839,28 @@ onBeforeUnmount(
 /* ==================================================
    订单详情弹窗
    ================================================== */
+/* 详情抽屉头部：标题 + 当前页内上下单切换 */
+.detail-drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding-right: 24px;
+}
+
+.detail-drawer-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--app-text-primary);
+}
+
+.detail-drawer-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .detail-tabs {
   flex: 1;
   min-height: 0;
@@ -6249,6 +6676,11 @@ onBeforeUnmount(
   /* Desktop hidden */
 
   .desktop-table {
+    display: none;
+  }
+
+  /* 移动端用卡片列表，桌面表头一并隐藏 */
+  .table-sticky-head {
     display: none;
   }
 
