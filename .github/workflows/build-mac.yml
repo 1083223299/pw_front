@@ -59,6 +59,8 @@ jobs:
         # xattr -cr /Applications/充值中心.app
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          # 只在 mac 构建时把应用名设为中文，产物（pwEsportsRechargeSetup…）文件名保持不变
+          VITE_PRODUCT_NAME: '充值中心'
         run: npm run dist:mac -- --${{ matrix.arch }}
 
       - name: 查看产物
