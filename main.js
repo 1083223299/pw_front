@@ -72,6 +72,8 @@ let updateVersion = null;
 let updateError = null;
 let updateProgress = null;
 let quitFlowActive = false;
+// macOS：从 DMG / 下载目录直接运行时，登录项会指向临时路径，标记为不注册开机自启。
+let isRunningOutsideApplications = false;
 
 // 通知托盘状态：未读列表、角标图片、闪动定时器和冒泡小窗。
 let notifyItems = [];
@@ -166,6 +168,12 @@ function applyAutoLaunch(enable, options = {}) {
       app.setLoginItemSettings(loginOptions);
       writeSettings({ autoLaunchApplied: enable });
     } else if (process.platform === 'darwin') {
+      // 未安装到「应用程序」文件夹时（例如直接从 DMG 打开），登录项会落到临时挂载路径，
+      // 重启后即失效，还会在系统设置里留下无效条目；这里直接跳过注册。
+      if (isRunningOutsideApplications && enable) {
+        console.warn('[settings] 应用未安装到「应用程序」文件夹，跳过登录项注册');
+        return;
+      }
       // macOS 13+ 每次调用 setLoginItemSettings 都会重新注册登录项，
       // 系统随之弹出“登录项已添加”通知。因此这里先读当前状态：
       // 1) 系统已是目标状态，直接跳过；
@@ -422,6 +430,12 @@ async function requestQuitWithUpdateCheck() {
   } catch (error) {
     const errorMessage = String((error && error.message) || error);
     console.error('[updater] 退出前检查或安装更新失败:', errorMessage);
+    // macOS 更新产物尚未发布时（例如找不到 latest-mac.yml），不应让退出被更新检查失败打断；
+    // 错误已进日志，Windows 仍保留原有的显式提示与选择。
+    if (process.platform === 'darwin') {
+      finishQuit();
+      return;
+    }
     const response = await showQuitDialog({
       type: 'warning',
       title: '更新失败',
@@ -625,7 +639,11 @@ function showSystemNotify(item, withSound) {
     body: item.content || item.body || '',
     silent: !withSound,
   });
-  notification.on('click', () => openNotifyPage(item));
+  notification.on('click', () => {
+    // 系统通知横幅被点击时应用可能仍在后台，先激活到前台再打开通知页。
+    app.focus({ steal: true });
+    openNotifyPage(item);
+  });
   notification.show();
 }
 
@@ -968,6 +986,42 @@ function setupNotifyIpc() {
 }
 
 /**
+ * macOS：从 DMG 挂载卷或下载目录直接启动时，登录项会指向临时路径，
+ * 自动更新也可能写到只读卷。这里只做检测并跳过登录项注册，提示等主窗口就绪后再弹。
+ */
+function checkMacInstallLocation() {
+  if (process.platform !== 'darwin' || !app.isPackaged) return false;
+  try {
+    if (app.isInApplicationsFolder()) return false;
+  } catch (error) {
+    console.warn('[startup] 检测应用安装位置失败:', error.message);
+    return false;
+  }
+
+  isRunningOutsideApplications = true;
+  return true;
+}
+
+/** 复用项目统一的对话框封装，保证与主窗口的模态关系、按钮与文案风格一致。 */
+async function promptMacInstallLocation() {
+  try {
+    const response = await showQuitDialog({
+      type: 'info',
+      title: '建议移到「应用程序」文件夹',
+      message: '充值中心当前未安装到「应用程序」文件夹',
+      detail: '从安装包或下载目录直接运行时，开机自启与自动更新可能无法正常工作。建议移到「应用程序」文件夹后重新打开。',
+      buttons: ['移到应用程序文件夹', '稍后处理'],
+      defaultId: 0,
+      cancelId: 1,
+    });
+    if (response.response !== 0) return;
+    app.moveToApplicationsFolder();
+  } catch (error) {
+    console.warn('[startup] 安装位置提示或移动失败:', error.message);
+  }
+}
+
+/**
  * macOS 顶部菜单栏：补齐系统惯例的「应用菜单 / 编辑菜单 / 窗口菜单」。
  * Windows 不设置，保持原有的无菜单条（Alt 也不唤出）行为。
  */
@@ -983,7 +1037,12 @@ function setupMacApplicationMenu() {
         { role: 'hideOthers', label: '隐藏其他' },
         { role: 'unhide', label: '全部显示' },
         { type: 'separator' },
-        { role: 'quit', label: '退出充值中心' },
+        {
+          label: '退出充值中心',
+          accelerator: 'Command+Q',
+          // 走与托盘退出相同的流程，保证 Cmd+Q 也会先检查/安装更新。
+          click: () => requestQuitWithUpdateCheck(),
+        },
       ],
     },
     {
@@ -1112,6 +1171,8 @@ if (!gotTheLock) {
 
   app.whenReady().then(async () => {
     markLaunch('ready');
+    // 先同步检测，标志位要赶在 initSettings() 注册登录项之前生效。
+    const needsInstallPrompt = checkMacInstallLocation();
     if (!DEV_SERVER_URL) {
       const { startLocalServer } = require('./localServer');
       const local = await startLocalServer({
@@ -1130,6 +1191,9 @@ if (!gotTheLock) {
     createWindow();
     createTray();
     markLaunch('tray');
+
+    // 主窗口已就绪后按项目统一的对话框封装提示，避免出现无父窗口的孤立弹框。
+    if (needsInstallPrompt) void promptMacInstallLocation();
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();
