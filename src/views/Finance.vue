@@ -140,7 +140,7 @@
           <div class="stat-icon">
             <el-icon><Tickets /></el-icon>
           </div>
-          <span class="stat-label">充值总笔数</span>
+          <span class="stat-label">成功充值笔数</span>
         </div>
 
         <div class="stat-value">
@@ -148,7 +148,7 @@
         </div>
 
         <div class="stat-footer">
-          <span>成功充值流水数量</span>
+          <span>所选时间范围内的成功充值笔数</span>
         </div>
       </div>
 
@@ -275,6 +275,7 @@
           <el-table
               v-loading="loading"
               :data="recordList"
+              :row-class-name="getRecordRowClassName"
               stripe
               class="finance-table"
               empty-text="暂无充值流水"
@@ -285,14 +286,9 @@
                 min-width="160"
                 fixed="left"
             >
-              <template #default="{ row }">
-                <span
-                    class="order-link"
-                    @click="openDetail(row)"
-                >
-                  {{ row.orderId }}
-                </span>
-              </template>
+                <template #default="{ row }">
+                  <span class="order-link">{{ row.orderId }}</span>
+                </template>
             </el-table-column>
 
             <el-table-column
@@ -358,12 +354,17 @@
                 align="right"
             >
               <template #default="{ row }">
-                <span
-                    class="difference-text"
-                    :class="getDiffClass(getDifference(row))"
+                <el-tooltip
+                    :content="getDifferenceHint(row)"
+                    placement="top"
                 >
-                  {{ formatDifference(getDifference(row)) }}
-                </span>
+                  <span
+                      class="difference-text"
+                      :class="getDiffClass(getDifference(row))"
+                  >
+                    {{ formatDifference(getDifference(row)) }}
+                  </span>
+                </el-tooltip>
               </template>
             </el-table-column>
 
@@ -425,7 +426,7 @@
                 <el-button
                     link
                     type="primary"
-                    @click="openDetail(row)"
+                    @click.stop="openDetail(row)"
                 >
                   详情
                 </el-button>
@@ -832,14 +833,48 @@
          ========================= -->
     <el-drawer
         v-model="detailVisible"
-        title="财务流水详情"
         size="520px"
         class="finance-detail-drawer"
     >
-      <div
-          v-if="detailRecord"
-          class="detail-content"
-      >
+      <template #header>
+        <div class="finance-detail-header">
+          <span>财务流水详情</span>
+          <div class="finance-detail-current">
+            <span v-if="detailNavigation.index >= 0">
+              第 {{ detailNavigation.index + 1 }} / {{ detailNavigation.total }} 条
+            </span>
+            <strong>{{ detailRecord?.orderId || detailRecord?.id || '正在切换…' }}</strong>
+          </div>
+          <div class="finance-detail-nav">
+            <el-button
+                size="small"
+                :disabled="!detailNavigation.prev || detailLoading"
+                @click.stop="openDetail(detailNavigation.prev)"
+            >
+              上一条
+            </el-button>
+            <el-button
+                size="small"
+                :disabled="!detailNavigation.next || detailLoading"
+                @click.stop="openDetail(detailNavigation.next)"
+            >
+              下一条
+            </el-button>
+          </div>
+        </div>
+      </template>
+      <div v-if="detailLoading" class="detail-switch-loading">
+        <el-skeleton :rows="6" animated />
+      </div>
+      <div v-else-if="detailLoadError" class="detail-switch-error">
+        {{ detailLoadError }}
+      </div>
+      <Transition name="finance-record-switch" mode="out-in">
+        <div
+            v-if="detailRecord && !detailLoading && !detailLoadError"
+            :key="String(detailRecord.id)"
+            class="detail-content"
+        >
 
         <!-- =========================
              支付金额
@@ -1083,6 +1118,7 @@
         </div>
 
       </div>
+      </Transition>
     </el-drawer>
 
     <!-- =========================
@@ -1358,6 +1394,30 @@ const filters = reactive({
 
 const detailVisible = ref(false)
 const detailRecord = ref(null)
+const detailLoading = ref(false)
+const detailLoadError = ref('')
+const activeDetailId = ref('')
+
+function getRecordRowClassName({ row }) {
+  return String(row.id) === activeDetailId.value
+      ? 'is-active'
+      : ''
+}
+
+const detailNavigation = computed(() => {
+  const index = recordList.value.findIndex(
+      row => String(row.id) === activeDetailId.value
+  )
+
+  return {
+    index,
+    total: recordList.value.length,
+    prev: index > 0 ? recordList.value[index - 1] : null,
+    next: index >= 0 && index < recordList.value.length - 1
+        ? recordList.value[index + 1]
+        : null
+  }
+})
 
 /* =========================
    租户余额
@@ -1591,6 +1651,12 @@ function getDifference(row) {
           Number(row.payAmount || 0)
       )
   )
+}
+
+function getDifferenceHint(row) {
+  return Number(row.payStatus) === 2
+      ? '差额 = 平台订单金额 - 实际充值金额；盈亏判断还需结合允许亏损金额。'
+      : '差额 = 平台订单金额 - 实际充值金额。支付未成功时，此金额仅供核对，不代表已完成充值或盈亏。'
 }
 
 function formatDifference(value) {
@@ -2394,10 +2460,17 @@ function viewDailyRecords(row) {
    ========================= */
 
 async function openDetail(row) {
-  if (!row.id) {
+  if (!row?.id) {
     ElMessage.error('财务流水ID不存在')
     return
   }
+
+  const requestedId = String(row.id)
+  activeDetailId.value = requestedId
+  detailRecord.value = null
+  detailLoadError.value = ''
+  detailLoading.value = true
+  detailVisible.value = true
 
   try {
     const res = await getFinanceDetail({
@@ -2405,12 +2478,21 @@ async function openDetail(row) {
     })
 
     const data = getResponseData(res)
+    if (activeDetailId.value !== requestedId) {
+      return
+    }
 
     detailRecord.value = normalizeFinance(data)
-    detailVisible.value = true
   } catch (err) {
     console.error('获取财务详情失败', err)
-    ElMessage.error(err.message || '获取财务详情失败')
+    if (activeDetailId.value === requestedId) {
+      detailLoadError.value = err.message || '获取财务详情失败'
+      ElMessage.error(err.message || '获取财务详情失败')
+    }
+  } finally {
+    if (activeDetailId.value === requestedId) {
+      detailLoading.value = false
+    }
   }
 }
 
@@ -2551,7 +2633,7 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   align-items: center;
   gap: 20px;
-  margin-bottom: 24px;
+  margin-bottom: 18px;
 }
 
 .page-title-row {
@@ -2630,8 +2712,8 @@ onBeforeUnmount(() => {
    ================================================== */
 
 .balance-panel {
-  margin-bottom: 24px;
-  padding: 20px;
+  margin-bottom: 18px;
+  padding: 16px 18px;
   border: 1px solid var(--app-border);
   border-radius: 13px;
   background: var(--app-bg-elevated);
@@ -2641,8 +2723,8 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 18px;
+  gap: 12px;
+  margin-bottom: 12px;
 }
 
 .balance-header h2 {
@@ -2663,7 +2745,7 @@ onBeforeUnmount(() => {
 }
 
 .balance-metric {
-  padding: 16px;
+  padding: 12px 14px;
   border: 1px solid var(--app-border);
   border-radius: 12px;
 }
@@ -2709,15 +2791,15 @@ onBeforeUnmount(() => {
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 16px;
-  margin-bottom: 24px;
+  gap: 12px;
+  margin-bottom: 18px;
 }
 
 .stat-card {
   position: relative;
   overflow: hidden;
   min-width: 0;
-  padding: 22px 20px;
+  padding: 17px 18px;
   border: 1px solid rgba(230, 235, 243, 0.65);
   border-radius: 13px;
   background: var(--app-bg-elevated);
@@ -2797,7 +2879,7 @@ onBeforeUnmount(() => {
 }
 
 .stat-value {
-  margin-top: 20px;
+  margin-top: 14px;
   font-size: clamp(22px, 1.8vw, 30px);
   font-weight: 700;
   color: var(--app-text-primary);
@@ -2832,7 +2914,7 @@ onBeforeUnmount(() => {
 }
 
 .stat-footer {
-  margin-top: 11px;
+  margin-top: 8px;
   font-size: 11px;
   color: var(--app-text-muted);
 }
@@ -2842,18 +2924,25 @@ onBeforeUnmount(() => {
    ================================================== */
 
 .content-card {
+  --finance-tabs-height: 58px;
   background: var(--app-bg-elevated);
   border: 1px solid var(--app-border);
   border-radius: 13px;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .tabs-header {
+  position: sticky;
+  top: 68px;
+  z-index: 20;
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0 20px;
+  background: var(--app-bg-elevated);
   border-bottom: 1px solid var(--app-border);
+  border-radius: 12px 12px 0 0;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
 }
 
 .custom-tabs {
@@ -2914,6 +3003,15 @@ onBeforeUnmount(() => {
   padding: 18px 20px;
 }
 
+.content-card > .filter-bar {
+  position: sticky;
+  top: calc(68px + var(--finance-tabs-height));
+  z-index: 19;
+  background: var(--app-bg-elevated);
+  border-bottom: 1px solid var(--app-border);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.035);
+}
+
 .filter-input {
   width: 200px;
 }
@@ -2928,6 +3026,42 @@ onBeforeUnmount(() => {
 
 .filter-bar :deep(.el-button + .el-button) {
   margin-left: 0;
+}
+
+.finance-detail-header {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: 12px;
+}
+
+.finance-detail-header > span {
+  flex: 0 0 auto;
+}
+
+.finance-detail-current {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  gap: 2px;
+  font-size: 11px;
+  color: var(--app-text-muted);
+}
+
+.finance-detail-current strong {
+  overflow: hidden;
+  color: var(--app-text-primary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.finance-detail-nav {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
 }
 
 /* ==================================================
@@ -2960,10 +3094,25 @@ onBeforeUnmount(() => {
   padding: 8px 0;
 }
 
+.finance-table :deep(.el-table__body tr.is-active > td.el-table__cell) {
+  background-color: color-mix(in srgb, var(--app-accent) 18%, var(--app-bg-elevated)) !important;
+  box-shadow: inset 0 1px 0 var(--app-accent-border), inset 0 -1px 0 var(--app-accent-border);
+}
+
+.finance-table :deep(.el-table__body tr.is-active > td.el-table__cell:first-child) {
+  box-shadow:
+      inset 4px 0 0 var(--app-accent),
+      inset 0 1px 0 var(--app-accent-border),
+      inset 0 -1px 0 var(--app-accent-border);
+}
+
 .order-link {
+  min-width: 0;
   color: var(--app-accent-strong);
   font-weight: 500;
   cursor: pointer;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
 }
 
 .order-link:hover {
@@ -3033,6 +3182,7 @@ onBeforeUnmount(() => {
 .difference-text {
   font-weight: 600;
   font-variant-numeric: tabular-nums;
+  cursor: help;
 }
 
 .diff-positive {
@@ -3099,6 +3249,31 @@ onBeforeUnmount(() => {
 
 .detail-content {
   padding: 0 2px 8px;
+}
+
+.detail-switch-loading {
+  padding: 12px 4px;
+}
+
+.detail-switch-error {
+  padding: 24px 12px;
+  color: var(--app-danger, #ef4444);
+  text-align: center;
+}
+
+.finance-record-switch-enter-active,
+.finance-record-switch-leave-active {
+  transition: opacity 0.16s ease, transform 0.16s ease;
+}
+
+.finance-record-switch-enter-from {
+  opacity: 0;
+  transform: translateX(10px);
+}
+
+.finance-record-switch-leave-to {
+  opacity: 0;
+  transform: translateX(-10px);
 }
 
 .detail-content .detail-amount-card {
@@ -3430,6 +3605,18 @@ onBeforeUnmount(() => {
    ================================================== */
 
 @media (max-width: 700px) {
+  .content-card {
+    --finance-tabs-height: 51px;
+  }
+
+  .tabs-header {
+    top: 108px;
+  }
+
+  .content-card > .filter-bar {
+    top: calc(108px + var(--finance-tabs-height));
+  }
+
   .page-header {
     margin-bottom: 18px;
   }
@@ -3440,6 +3627,15 @@ onBeforeUnmount(() => {
 
   .page-header p {
     line-height: 1.6;
+  }
+
+  .finance-detail-header {
+    flex-wrap: wrap;
+  }
+
+  .finance-detail-current {
+    order: 3;
+    flex-basis: 100%;
   }
 
   .header-actions {
@@ -3593,6 +3789,14 @@ onBeforeUnmount(() => {
   :deep(.finance-detail-drawer) {
     width: 100% !important;
   }
+}
+
+body.desktop-app .finance-page .tabs-header {
+  top: 0;
+}
+
+body.desktop-app .finance-page .content-card > .filter-bar {
+  top: var(--finance-tabs-height);
 }
 
 @media (max-width: 380px) {

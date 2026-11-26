@@ -682,7 +682,10 @@
     <!-- =========================
          订单列表
          ========================= -->
-    <section class="orders-card">
+    <section
+        class="orders-card"
+        :style="{ '--home-filter-height': `${stickyFilterHeight}px` }"
+    >
 
       <div class="orders-header">
 
@@ -696,7 +699,9 @@
           </div>
         </div>
 
+      </div>
 
+      <div ref="orderToolsStickyRef" class="order-tools-sticky">
         <!-- =========================
              筛选
              ========================= -->
@@ -796,9 +801,7 @@
               {{ compactMode ? '舒适' : '紧凑' }}
             </el-button>
           </el-tooltip>
-
         </div>
-
       </div>
 
 
@@ -843,7 +846,6 @@
               :key="item.id"
               class="table-row"
               :class="{ 'is-active': activeOrderId === item.id }"
-              @click="openDetailDialog(item)"
           >
 
             <!-- 订单：前缀弱化、尾号加亮，尾号区悬停可复制 -->
@@ -1809,6 +1811,8 @@ const refreshing = ref(false)
    滚动
    ================================================== */
 const orderScrollRef = ref(null)
+const orderToolsStickyRef = ref(null)
+const stickyFilterHeight = ref(0)
 
 /* 吸顶表头：位于横向滚动容器之外，靠 scrollLeft 同步位置 */
 const tableHeadRef = ref(null)
@@ -1821,6 +1825,14 @@ const compactMode = ref(false)
 const activeOrderId = ref(null)
 
 let tableHeadFrame = 0
+let orderToolsResizeObserver = null
+
+function updateStickyFilterHeight() {
+  const element = orderToolsStickyRef.value
+  if (element) {
+    stickyFilterHeight.value = Math.ceil(element.getBoundingClientRect().height)
+  }
+}
 
 /**
  * 表头与表体横向对齐：
@@ -4283,6 +4295,7 @@ function handleResize() {
   viewportWidth.value = window.innerWidth
 
   // 窗口宽度变化会改变横向滚动量，重新对齐吸顶表头
+  updateStickyFilterHeight()
   syncTableHeadScroll()
 }
 
@@ -4335,6 +4348,12 @@ onMounted(async () => {
   await nextTick()
   stopQueryWatch = watch(() => route.query, locateOrderByQuery)
 
+  updateStickyFilterHeight()
+  if (typeof ResizeObserver !== 'undefined' && orderToolsStickyRef.value) {
+    orderToolsResizeObserver = new ResizeObserver(updateStickyFilterHeight)
+    orderToolsResizeObserver.observe(orderToolsStickyRef.value)
+  }
+
   window.addEventListener('resize', handleResize)
 
   // 首屏渲染后对齐一次吸顶表头
@@ -4349,6 +4368,10 @@ onMounted(async () => {
 onBeforeUnmount(
     () => {
       if (stopQueryWatch) stopQueryWatch()
+      if (orderToolsResizeObserver) {
+        orderToolsResizeObserver.disconnect()
+        orderToolsResizeObserver = null
+      }
 
       window.removeEventListener(
           'resize',
@@ -4366,6 +4389,7 @@ onBeforeUnmount(
    页面
    ================================================== */
 .home-page {
+  --home-sticky-nav-offset: 68px;
   width: 100%;
   min-height: 100%;
   padding: 28px 32px 40px;
@@ -4600,9 +4624,16 @@ onBeforeUnmount(
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 16px;
-  padding: 22px 24px 20px;
+  padding: 22px 24px 12px;
+}
+
+.order-tools-sticky {
+  position: sticky;
+  top: var(--home-sticky-nav-offset);
+  z-index: 10;
+  padding: 8px 24px 16px;
   border-bottom: 1px solid var(--app-border);
+  background: var(--app-bg-elevated);
 }
 
 .orders-title {
@@ -4722,7 +4753,7 @@ onBeforeUnmount(
 /* 表头位于横向滚动容器之外，粘贴在页面滚动容器顶部 */
 .table-sticky-head {
   position: sticky;
-  top: 0;
+  top: calc(var(--home-sticky-nav-offset, 68px) + var(--home-filter-height, 0px));
   z-index: 6;
   overflow: hidden;
   border-bottom: 1px solid var(--app-border);
@@ -4792,13 +4823,6 @@ onBeforeUnmount(
   border-bottom: 1px solid var(--app-border-light);
   background: var(--app-bg-elevated);
   transition: background 0.18s ease;
-  cursor: pointer;
-}
-
-/* 正在查看/刚查看过的订单：左侧竖条 + 同款底色，关闭详情后不丢位置 */
-.table-row.is-active {
-  background: var(--app-accent-soft);
-  box-shadow: inset 3px 0 0 var(--app-accent);
 }
 
 .table-row:nth-child(odd) {
@@ -4807,6 +4831,15 @@ onBeforeUnmount(
 
 .table-row:hover {
   background: var(--app-accent-soft);
+}
+
+.table-row.is-active,
+.table-row.is-active:hover {
+  background: color-mix(in srgb, var(--app-accent) 18%, var(--app-bg-elevated));
+  box-shadow:
+      inset 4px 0 0 var(--app-accent),
+      inset 0 1px 0 var(--app-accent-border),
+      inset 0 -1px 0 var(--app-accent-border);
 }
 
 .table-row:last-child {
@@ -6545,8 +6578,11 @@ onBeforeUnmount(
   .orders-header {
     align-items: flex-start;
     flex-direction: column;
-    gap: 15px;
-    padding: 18px 22px;
+    padding: 18px 22px 10px;
+  }
+
+  .order-tools-sticky {
+    padding: 0 22px 14px;
   }
 
   .order-tools {
@@ -6562,6 +6598,10 @@ onBeforeUnmount(
    ================================================== */
 
 @media (max-width: 700px) {
+  .home-page {
+    --home-sticky-nav-offset: 108px;
+  }
+
   .platform-select {
     width: 100%;
     grid-column: 1 / -1;
@@ -6640,11 +6680,15 @@ onBeforeUnmount(
   .orders-header {
     min-height: auto;
     display: block;
-    padding: 17px 15px 14px;
+    padding: 17px 15px 10px;
+  }
+
+  .order-tools-sticky {
+    padding: 0 15px 14px;
   }
 
   .order-tools {
-    margin-top: 13px;
+    margin-top: 0;
     display: grid;
     grid-template-columns:
       1fr 105px;
@@ -7327,6 +7371,7 @@ onBeforeUnmount(
 .home-page .home-pagination { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; padding: 18px 20px; border-top: 1px solid var(--app-border); }
 .home-page .pagination-total { font-size: 13px; color: var(--app-text-muted); }
 .home-page .home-pagination :deep(.el-pagination.is-background .el-pager li.is-active) { background: var(--app-accent); }
+body.desktop-app .home-page { --home-sticky-nav-offset: 0px; }
 @media(max-width: 768px) { .home-page .home-pagination { justify-content: center; } .home-page .home-pagination :deep(.el-pagination__jump) { display: none; } }
 </style>
 
