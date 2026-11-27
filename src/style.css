@@ -567,10 +567,37 @@ html.dark .el-button--primary:not(.is-link) {
     color: var(--app-accent-contrast);
 }
 
-/* 链接型/朴素型主按钮仍使用金色文字，避免深色背景上文字看不清 */
-html.dark .el-button--primary.is-link,
-html.dark .el-button--primary.is-plain {
+/* 链接型主按钮在深色底上用金色文字 */
+html.dark .el-button--primary.is-link {
     color: var(--app-accent-strong);
+}
+
+/* 朴素型主按钮：深色主题里 --el-color-primary-light-9 接近纯白，
+   直接用会变成刺眼的白块。统一改成半透明金底 + 金边 + 金字，
+   与旁边的 warning / danger 描边按钮保持一致，只有悬浮时才填充实金。 */
+html.dark .el-button--primary.is-plain:not(.is-disabled) {
+    background-color: var(--app-accent-soft);
+    border-color: var(--app-accent-border);
+    color: var(--app-accent-strong);
+}
+
+html.dark .el-button--primary.is-plain:not(.is-disabled):hover {
+    background-color: var(--app-accent);
+    border-color: var(--app-accent);
+    color: var(--app-accent-contrast);
+}
+
+html.dark .el-button--primary.is-plain:not(.is-disabled):active {
+    background-color: var(--app-accent-strong);
+    border-color: var(--app-accent-strong);
+    color: var(--app-accent-contrast);
+}
+
+/* 禁用态同样不再沿用近白底色 */
+html.dark .el-button--primary.is-plain.is-disabled {
+    background-color: var(--app-bg-subtle);
+    border-color: var(--app-border);
+    color: var(--app-text-placeholder);
 }
 
 /* 深色主色标签使用金色半透明底 + 亮金文字，避免浅金底上文字对比不足 */

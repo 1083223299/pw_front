@@ -60,13 +60,16 @@
               <template v-else-if="scheduleForm.mode === 'manual'">
                 <el-tag v-for="workId in scheduleForm.workIds" :key="workId" closable size="small" @close="removeScheduleWorker(workId)">{{ workId }}</el-tag>
                 <span v-if="scheduleForm.workIds.length === 0" class="selected-placeholder">尚未选择 Worker</span>
+                <el-button size="small" plain :disabled="selectedTenant === null" @click="openWorkerSelector">选择 Worker</el-button>
               </template>
               <template v-else-if="scheduleForm.mode === 'group'">
-                <el-select v-model="scheduleForm.groups" multiple collapse-tags collapse-tags-tooltip placeholder="选择派单分组" class="schedule-group-select" :disabled="selectedTenant === null">
+                <el-select v-model="scheduleForm.groups" multiple collapse-tags collapse-tags-tooltip placeholder="选择派单分组" class="schedule-group-select" :disabled="selectedTenant === null" @change="scheduleDirty = true">
                   <el-option v-for="group in workerGroups" :key="group.name" :label="group.name" :value="group.name" />
                 </el-select>
               </template>
             </div>
+            <el-tag v-if="scheduleDirty" size="small" type="warning" effect="plain">未保存</el-tag>
+            <el-button v-if="scheduleDirty" size="small" @click="discardScheduleChanges">还原</el-button>
             <el-button type="primary" :icon="Check" :disabled="selectedTenant === null" :loading="scheduleSaving" @click="saveSchedule">保存配置</el-button>
           </div>
         </div>
@@ -82,19 +85,19 @@
             <el-table-column v-if="activePlatform === 'android'" label="分组" min-width="120"><template #default="{ row }"><span class="group-badge" :class="{ ungrouped: !row.group }">{{ row.group || '未分组' }}</span></template></el-table-column>
             <el-table-column label="连接状态" min-width="100"><template #default><span class="connection-status"><span class="online-dot"></span>在线</span></template></el-table-column>
             <el-table-column label="执行状态" min-width="100"><template #default="{ row }"><span class="running-badge" :class="row.isRunning ? 'busy' : 'idle'"><el-icon v-if="row.isRunning"><Loading /></el-icon>{{ row.isRunning ? '执行中' : '空闲' }}</span></template></el-table-column>
-            <el-table-column label="当前任务" min-width="170"><template #default="{ row }"><span v-if="row.orderId" class="order-link" @click="copyText(row.orderId)">{{ row.orderId }}</span><span v-else class="empty-value">-</span></template></el-table-column>
+            <el-table-column label="当前任务" min-width="170"><template #default="{ row }"><span v-if="row.orderId" class="task-order-cell"><el-tooltip content="查看订单详情" placement="top"><button class="order-link task-order-link" @click="openOrder(row.orderId)">{{ row.orderId }}</button></el-tooltip><el-tooltip content="复制订单号" placement="top"><el-icon class="copy-icon" @click.stop="copyText(row.orderId)"><CopyDocument /></el-icon></el-tooltip></span><span v-else class="empty-value">-</span></template></el-table-column>
             <el-table-column label="调度权限" min-width="95"><template #default="{ row }"><span class="permission-badge" :class="isWorkerAllowed(row) ? 'allowed' : 'blocked'">{{ isWorkerAllowed(row) ? '允许' : '未选中' }}</span></template></el-table-column>
             <el-table-column label="连接时长" min-width="105"><template #default="{ row }">{{ formatDuration(row.connectedAt) }}</template></el-table-column>
-            <el-table-column label="最后心跳" min-width="105"><template #default="{ row }">{{ formatHeartbeat(row.lastHeartbeat) }}</template></el-table-column>
-            <el-table-column label="操作" min-width="220" fixed="right" align="center"><template #default="{ row }"><div class="table-actions"><el-button v-if="row.platform === 'android'" size="small" type="warning" plain @click="openAssignDialog(row)">设组</el-button><el-tooltip content="仅允许该 Worker 执行"><el-button size="small" type="primary" plain @click="setOnlyWorker(row)">指定</el-button></el-tooltip><el-button size="small" type="danger" plain @click="disconnectWorker(row)">断开</el-button><el-button size="small" @click="showDetail(row)">详情</el-button></div></template></el-table-column>
+            <el-table-column label="最后心跳" min-width="105"><template #default="{ row }"><span class="heartbeat-value" :class="getHeartbeatClass(row.lastHeartbeat)">{{ formatHeartbeat(row.lastHeartbeat) }}</span></template></el-table-column>
+            <el-table-column label="操作" min-width="220" fixed="right" align="center"><template #default="{ row }"><div class="table-actions"><el-button v-if="row.platform === 'android'" size="small" type="warning" plain @click="openAssignDialog(row)">设组</el-button><el-tooltip content="仅允许该 Worker 执行"><el-button size="small" type="primary" plain @click="setOnlyWorker(row)">指定</el-button></el-tooltip><el-button size="small" type="danger" plain @click="disconnectWorker(row)">断开</el-button><el-button class="detail-action" size="small" @click="showDetail(row)">详情</el-button></div></template></el-table-column>
           </el-table>
         </div>
 
         <div class="mobile-worker-list">
           <div v-for="row in pageWorkers" :key="row.id" class="mobile-worker-card">
             <div class="mobile-worker-top"><div class="mobile-worker-name"><strong>{{ row.workId }}</strong></div><span class="running-badge" :class="row.isRunning ? 'busy' : 'idle'">{{ row.isRunning ? '执行中' : '空闲' }}</span></div>
-            <div class="mobile-worker-info"><div><span>租户</span><strong>{{ row.tenantId }}</strong></div><div><span>平台</span><strong>{{ row.platform }}</strong></div><div v-if="row.platform === 'android'"><span>付款账号</span><strong>{{ row.payAccount }}</strong></div><div v-if="row.platform === 'android'"><span>分组</span><strong>{{ row.group || '未分组' }}</strong></div><div><span>当前任务</span><strong>{{ row.orderId || '-' }}</strong></div><div><span>调度权限</span><span class="permission-badge" :class="isWorkerAllowed(row) ? 'allowed' : 'blocked'">{{ isWorkerAllowed(row) ? '允许' : '未选中' }}</span></div><div><span>连接时长</span><strong>{{ formatDuration(row.connectedAt) }}</strong></div></div>
-            <div class="mobile-worker-actions"><el-button v-if="row.platform === 'android'" size="small" type="warning" plain @click="openAssignDialog(row)">设组</el-button><el-button size="small" type="primary" plain @click="setOnlyWorker(row)">指定执行</el-button><el-button size="small" @click="showDetail(row)">详情</el-button><el-button size="small" type="danger" plain @click="disconnectWorker(row)">断开</el-button></div>
+            <div class="mobile-worker-info"><div><span>租户</span><strong>{{ row.tenantId }}</strong></div><div><span>平台</span><strong>{{ row.platform }}</strong></div><div v-if="row.platform === 'android'"><span>付款账号</span><strong>{{ row.payAccount }}</strong></div><div v-if="row.platform === 'android'"><span>分组</span><strong>{{ row.group || '未分组' }}</strong></div><div><span>当前任务</span><strong v-if="row.orderId" class="mobile-task-order"><button class="order-link task-order-link" @click="openOrder(row.orderId)">{{ row.orderId }}</button><el-icon class="copy-icon" title="复制订单号" @click.stop="copyText(row.orderId)"><CopyDocument /></el-icon></strong><strong v-else>-</strong></div><div><span>调度权限</span><span class="permission-badge" :class="isWorkerAllowed(row) ? 'allowed' : 'blocked'">{{ isWorkerAllowed(row) ? '允许' : '未选中' }}</span></div><div><span>连接时长</span><strong>{{ formatDuration(row.connectedAt) }}</strong></div><div><span>最后心跳</span><strong class="heartbeat-value" :class="getHeartbeatClass(row.lastHeartbeat)">{{ formatHeartbeat(row.lastHeartbeat) }}</strong></div></div>
+            <div class="mobile-worker-actions"><el-button v-if="row.platform === 'android'" size="small" type="warning" plain @click="openAssignDialog(row)">设组</el-button><el-button size="small" type="primary" plain @click="setOnlyWorker(row)">指定执行</el-button><el-button class="detail-action" size="small" @click="showDetail(row)">详情</el-button><el-button size="small" type="danger" plain @click="disconnectWorker(row)">断开</el-button></div>
           </div>
           <el-empty v-if="pageWorkers.length === 0" description="暂无在线 Worker" />
         </div>
@@ -182,6 +185,7 @@
 
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Connection, Link, Monitor, Iphone, User, UserFilled, Grid, Refresh, Search, CircleCheck, DataAnalysis, FullScreen, Operation, Aim, Plus, Check, Loading, InfoFilled, CopyDocument, Collection } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
@@ -192,13 +196,22 @@ const scheduleConfigs = ref({})
 const tenantNames = {} // 如有租户名称映射，可在此补充
 const STORAGE_TENANT = 'worker_selected_tenant'
 const STORAGE_PLATFORM = 'worker_active_platform'
+const STORAGE_AUTO_REFRESH = 'worker_auto_refresh'
 const savedTenant = localStorage.getItem(STORAGE_TENANT)
 const selectedTenant = ref(savedTenant === null ? null : savedTenant)
 const activePlatform = ref(localStorage.getItem(STORAGE_PLATFORM) === 'android' ? 'android' : 'pc')
+function readAutoRefreshPreference() {
+  try {
+    return localStorage.getItem(STORAGE_AUTO_REFRESH) === 'true'
+  } catch (error) {
+    console.warn('读取自动刷新设置失败:', error)
+    return false
+  }
+}
 const tenantKeyword = ref('')
 const workerKeyword = ref('')
 const statusFilter = ref('')
-const autoRefresh = ref(false)
+const autoRefresh = ref(readAutoRefreshPreference())
 const refreshing = ref(false)
 const currentPage = ref(1)
 const pageSize = ref(10)
@@ -222,6 +235,7 @@ const assignTarget = ref('__ungrouped__')
 const assignNewName = ref('')
 const assignSaving = ref(false)
 const currentTime = ref(Date.now())
+const router = useRouter()
 let refreshTimer = null
 let clockTimer = null
 
@@ -294,8 +308,35 @@ function loadSchedule() {
 function setScheduleMode(mode) {
   if (selectedTenant.value === null) return ElMessage.warning('请先选择租户')
   if (mode === 'group' && activePlatform.value !== 'android') return ElMessage.warning('按组派单仅支持 Android 设备')
+  if (scheduleForm.value.mode === mode) return
   scheduleForm.value.mode = mode
   scheduleDirty.value = true
+}
+async function confirmDiscardScheduleChanges(action = '切换') {
+  if (!scheduleDirty.value) return true
+  try {
+    await ElMessageBox.confirm(
+      `当前调度配置尚未保存，继续${action}将丢弃这些修改。`,
+      '存在未保存的配置',
+      {
+        confirmButtonText: '放弃修改并继续',
+        cancelButtonText: '继续编辑',
+        type: 'warning',
+      }
+    )
+    return true
+  } catch (error) {
+    if (error !== 'cancel' && error !== 'close') {
+      console.error('确认放弃调度配置失败:', error)
+      ElMessage.error('操作未完成，请重试')
+    }
+    return false
+  }
+}
+function discardScheduleChanges() {
+  if (!scheduleDirty.value) return
+  loadSchedule()
+  ElMessage.info('已还原为当前已保存配置')
 }
 const scheduleAvailableWorkers = computed(() => selectedTenant.value === null ? [] : workers.value.filter(item => item.tenantId === String(selectedTenant.value) && item.platform === activePlatform.value))
 function removeScheduleWorker(workId) {
@@ -361,6 +402,7 @@ async function saveSchedule() {
   } finally { scheduleSaving.value = false }
 }
 async function setOnlyWorker(worker) {
+  if (!await confirmDiscardScheduleChanges('指定 Worker')) return
   try {
     await ElMessageBox.confirm(`确定将租户 ${worker.tenantId} 的 ${worker.platform.toUpperCase()} 任务仅指定给当前 Worker 吗？`, '指定 Worker', { confirmButtonText: '确定指定', cancelButtonText: '取消', type: 'warning' })
   } catch { return }
@@ -380,13 +422,20 @@ async function setOnlyWorker(worker) {
   } finally { scheduleSaving.value = false }
 }
 async function selectTenant(tenantId) {
-  selectedTenant.value = tenantId === null ? null : String(tenantId)
+  const nextTenantId = tenantId === null ? null : String(tenantId)
+  if (nextTenantId === selectedTenant.value) return
+  if (scheduleSaving.value) return ElMessage.warning('调度配置正在保存，请稍后再切换')
+  if (!await confirmDiscardScheduleChanges('切换租户')) return
+  selectedTenant.value = nextTenantId
   currentPage.value = 1
   groupFilter.value = ''
   loadSchedule()
   await loadGroupList()
 }
-function changePlatform(platform) {
+async function changePlatform(platform) {
+  if (platform === activePlatform.value) return
+  if (scheduleSaving.value) return ElMessage.warning('调度配置正在保存，请稍后再切换')
+  if (!await confirmDiscardScheduleChanges('切换平台')) return
   activePlatform.value = platform
   currentPage.value = 1
   workerKeyword.value = ''
@@ -569,8 +618,13 @@ async function refreshData(showMessage = false) {
 }
 watch(autoRefresh, enabled => {
   if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null }
+  try {
+    localStorage.setItem(STORAGE_AUTO_REFRESH, String(enabled))
+  } catch (error) {
+    console.warn('保存自动刷新设置失败:', error)
+  }
   if (enabled) refreshTimer = setInterval(() => refreshData(), 3000)
-})
+}, { immediate: true })
 watch([workerKeyword, statusFilter, groupFilter, pageSize], () => { currentPage.value = 1 })
 watch(filteredWorkers, data => { const maxPage = Math.max(1, Math.ceil(data.length / pageSize.value)); if (currentPage.value > maxPage) currentPage.value = maxPage })
 function formatDuration(timestamp) {
@@ -582,6 +636,18 @@ function formatHeartbeat(timestamp) {
   if (!timestamp) return '-'
   const seconds = Math.max(0, Math.floor((currentTime.value - timestamp) / 1000))
   return seconds < 60 ? `${seconds} 秒前` : `${Math.floor(seconds / 60)} 分钟前`
+}
+function getHeartbeatClass(timestamp) {
+  if (!timestamp) return 'unknown'
+  const ageSeconds = Math.max(0, (currentTime.value - timestamp) / 1000)
+  if (ageSeconds >= 60) return 'stale'
+  if (ageSeconds >= 30) return 'delayed'
+  return 'healthy'
+}
+function openOrder(orderId) {
+  const value = String(orderId || '').trim()
+  if (!value) return
+  router.push({ name: 'Home', query: { orderId: value } })
 }
 function formatDate(timestamp) { return timestamp ? new Date(timestamp).toLocaleString('zh-CN', { hour12: false }) : '-' }
 async function copyText(value) { try { await navigator.clipboard.writeText(value); ElMessage.success('复制成功') } catch { ElMessage.warning('复制失败') } }
@@ -626,6 +692,54 @@ onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer); if (clockTime
 @media(max-width:900px){.stats-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.main-layout{grid-template-columns:1fr}.tenant-panel{max-height:250px}.tenant-list{overflow-y:auto}.tenant-footer{display:none}.hero-decoration{opacity:.5}}
 @media(max-width:700px){.hero-banner{min-height:110px;padding:20px;border-radius:13px}.hero-left{gap:12px}.hero-icon{width:42px;height:42px;font-size:22px}.hero-content h1{font-size:17px}.hero-content p{font-size:10px;line-height:1.6}.hero-live,.hero-decoration{display:none}.stats-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.stat-card{min-height:95px;gap:10px;padding:13px;border-radius:12px}.stat-icon{width:39px;height:39px;font-size:19px}.stat-title{font-size:10px}.stat-number{font-size:21px}.stat-desc{font-size:9px}.running-stat{grid-column:span 2}.worker-tabs-header{padding:0 12px}.platform-tabs{gap:0}.platform-tab{gap:5px;padding:0 10px;font-size:11px}.platform-tab .el-icon{font-size:15px}.auto-refresh span{display:none}.worker-header-actions{gap:7px}.schedule-section{padding:14px;gap:10px}.schedule-title{width:100%}.schedule-modes{min-width:0;grid-template-columns:1fr}.schedule-mode{min-width:0}.mode-info strong{font-size:10px}.mode-info span{white-space:normal;font-size:9px}.mode-icon{display:none}.schedule-selected{flex-wrap:wrap}.selected-workers{flex-basis:100%}.schedule-selected>.el-button{margin-left:auto}.worker-toolbar{padding:14px;flex-wrap:wrap}.toolbar-left{width:100%}.worker-search{flex:1;min-width:0}.status-filter{width:110px}.worker-table{display:none}.mobile-worker-list{display:block;padding:0 14px}.pagination-row{justify-content:center;padding:0 14px 18px}.pagination-row>span,.pagination-row :deep(.el-pagination__sizes){display:none}}
 @media(max-width:380px){.stat-card{padding:10px}.stat-icon{width:33px;height:33px;font-size:17px}.platform-tab{padding:0 7px}}
+
+.link-page{padding:18px 22px 30px}
+.hero-banner{min-height:94px;padding:16px 28px;margin-bottom:14px}
+.hero-icon{width:48px;height:48px;font-size:25px}
+.hero-content h1{font-size:22px}
+.hero-content p{margin-top:7px}
+.stats-grid{gap:12px;margin-bottom:14px}
+.stat-card{min-height:84px;padding:13px;gap:11px}
+.stat-icon{width:48px;height:48px;font-size:23px}
+.stat-number{font-size:24px}
+.main-layout{gap:14px}
+.worker-tabs-header,.platform-tabs{min-height:50px;height:50px}
+.platform-tab{height:40px}
+.schedule-section{padding:9px 14px}
+.schedule-mode,.schedule-selected{min-height:52px}
+.worker-toolbar{padding:10px 16px}
+.worker-table{padding:0 16px}
+.worker-table :deep(.el-table td.el-table__cell){height:44px}
+.worker-table :deep(.el-table__body-wrapper){max-height:min(420px,max(220px,calc(100dvh - 480px)));overflow-y:auto}
+.pagination-row{padding:10px 16px 12px}
+.task-order-cell,.mobile-task-order{display:inline-flex;align-items:center;gap:7px;min-width:0;max-width:100%}
+.task-order-link{padding:0;border:0;background:transparent;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.task-order-link:hover{color:var(--app-accent);text-decoration:underline}
+.mobile-task-order{max-width:68%}
+.heartbeat-value{font-size:11px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.heartbeat-value.healthy{color:var(--app-text-secondary)}
+.heartbeat-value.delayed{color:#b7791f;font-weight:600}
+.heartbeat-value.stale{color:#dc4c4c;font-weight:700}
+.heartbeat-value.unknown{color:var(--app-text-muted)}
+.table-actions .detail-action,.mobile-worker-actions .detail-action{--el-button-text-color:var(--app-text-secondary);--el-button-bg-color:transparent;--el-button-border-color:transparent;--el-button-hover-text-color:var(--app-accent-strong);--el-button-hover-bg-color:var(--app-accent-soft);--el-button-hover-border-color:transparent}
+@media(max-width:1100px){.hero-decoration{display:none}}
+@media(max-width:700px){
+  .link-page{padding:14px 14px 24px}
+  .hero-banner{min-height:94px;padding:15px}
+  .hero-content h1{font-size:17px}
+  .stats-grid{gap:10px}
+  .stat-card{min-height:82px;padding:11px}
+  .worker-tabs-header,.platform-tabs{min-height:48px;height:48px}
+  .platform-tab{height:40px}
+  .schedule-section{padding:10px 14px}
+  .worker-toolbar{padding:10px 14px}
+  .pagination-row{padding:0 14px 14px}
+}
+
+.worker-table :deep(.el-table__body-wrapper tr td.el-table-fixed-column--right){background-color:var(--app-bg-elevated)!important}
+.worker-table :deep(.el-table__body-wrapper tr.el-table__row--striped td.el-table-fixed-column--right){background-color:var(--app-bg-subtle)!important}
+.worker-table :deep(.el-table__body-wrapper tr.hover-row td.el-table-fixed-column--right),
+.worker-table :deep(.el-table__body-wrapper tr:hover td.el-table-fixed-column--right){background-color:var(--app-bg-hover)!important}
 </style>
 
 <!-- 深色主题覆盖（非 scoped）：链接管控统计卡片统一深灰底，浅色模式保持原样 -->
@@ -710,4 +824,9 @@ html.dark .hero-banner {
 
 html.dark .platform-badge.android { background: rgba(34, 160, 107, 0.14); }
 html.dark .permission-badge.allowed { background: rgba(34, 160, 107, 0.14); }
+html.dark .permission-badge.blocked {
+  color: var(--app-text-secondary);
+  background: var(--app-bg-hover);
+  border: 1px solid var(--app-border);
+}
 </style>

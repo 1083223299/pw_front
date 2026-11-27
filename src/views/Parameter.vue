@@ -244,7 +244,10 @@
             <div class="platform-icon-wrap">
               <div
                   class="platform-icon"
-                  :class="`platform-icon-${platform.color || 'blue'}`"
+                  :class="[
+                    `platform-icon-${platform.color || 'blue'}`,
+                    { 'platform-icon-compact': (platform.icon || platform.name?.slice(0, 1) || 'P').length > 2 }
+                  ]"
               >
                 {{ platform.icon || platform.name?.slice(0, 1) || 'P' }}
               </div>
@@ -416,9 +419,12 @@
 
                 <div
                     class="platform-option-icon"
-                    :class="`platform-icon-${item.color}`"
+                  :class="[
+                    `platform-icon-${item.color}`,
+                    { 'platform-icon-compact': item.icon.length > 2 }
+                  ]"
                 >
-                  {{ item.icon }}
+                {{ item.icon }}
                 </div>
 
                 <div>
@@ -440,7 +446,10 @@
           <div class="selected-platform">
             <div
                 class="selected-platform-icon"
-                :class="`platform-icon-${platformForm.color || 'blue'}`"
+                :class="[
+                  `platform-icon-${platformForm.color || 'blue'}`,
+                  { 'platform-icon-compact': (platformForm.icon || 'P').length > 2 }
+                ]"
             >
               {{ platformForm.icon || 'P' }}
             </div>
@@ -474,7 +483,10 @@
           <div class="icon-input-row">
             <div
                 class="preview-platform-icon"
-                :class="`platform-icon-${platformForm.color || 'blue'}`"
+                :class="[
+                  `platform-icon-${platformForm.color || 'blue'}`,
+                  { 'platform-icon-compact': (platformForm.icon || 'P').length > 2 }
+                ]"
             >
               {{ platformForm.icon || 'P' }}
             </div>
@@ -1526,12 +1538,19 @@ export default {
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
   border-radius: 15px;
   font-size: 22px;
   font-weight: 700;
+  white-space: nowrap;
   transition:
       transform .2s ease,
       filter .2s ease;
+}
+
+.platform-icon-compact {
+  font-size: 12px;
+  letter-spacing: -.3px;
 }
 
 .platform-icon-wrap:hover .platform-icon {
@@ -1883,6 +1902,13 @@ export default {
   align-self: center;   /* 加这行 */
 }
 
+.platform-option-icon.platform-icon-compact {
+  overflow: hidden;
+  font-size: 7px;
+  letter-spacing: -.2px;
+  white-space: nowrap;
+}
+
 .platform-option-name {
   font-size: 13px;
   line-height: 18px;   /* 加这行 */
@@ -1934,6 +1960,14 @@ export default {
   border-radius: 10px;
   font-size: 16px;
   font-weight: 700;
+}
+
+.selected-platform-icon.platform-icon-compact,
+.preview-platform-icon.platform-icon-compact {
+  overflow: hidden;
+  font-size: 9px;
+  letter-spacing: -.3px;
+  white-space: nowrap;
 }
 
 .selected-platform-name {
