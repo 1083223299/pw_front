@@ -76,7 +76,7 @@
           </div>
         </div>
 
-        <div class="worker-toolbar"><div class="toolbar-left"><el-input v-model="workerKeyword" :prefix-icon="Search" placeholder="搜索 WorkID / 设备号 / 租户 / 任务" clearable class="worker-search" /><el-select v-model="statusFilter" placeholder="全部状态" clearable class="status-filter"><el-option label="空闲" value="idle" /><el-option label="执行中" value="running" /></el-select><el-select v-if="activePlatform === 'android'" v-model="groupFilter" placeholder="全部分组" clearable class="group-filter" @clear="groupFilter = ''"><el-option label="全部分组" value="" /><el-option label="未分组" value="__ungrouped__" /><el-option v-for="group in workerGroups" :key="group.name" :label="group.name" :value="group.name" /></el-select><el-button v-if="activePlatform === 'android'" size="small" @click="openGroupDialog">分组管理</el-button><el-button v-if="activePlatform === 'android'" size="small" type="primary" plain :icon="Tools" @click="openConfigDrawer">支付宝与设备管理</el-button></div><div class="toolbar-right"><span class="online-label"><span class="online-dot"></span> 当前在线 {{ filteredWorkers.length }}</span></div></div>
+        <div class="worker-toolbar"><div class="toolbar-left"><el-input v-model="workerKeyword" :prefix-icon="Search" placeholder="搜索 WorkID / 设备号 / 租户 / 任务" clearable class="worker-search" /><el-select v-model="statusFilter" placeholder="全部状态" clearable class="status-filter"><el-option label="空闲" value="idle" /><el-option label="执行中" value="running" /></el-select><el-select v-if="activePlatform === 'android'" v-model="groupFilter" placeholder="全部分组" clearable class="group-filter" @clear="groupFilter = ''"><el-option label="全部分组" value="" /><el-option label="未分组" value="__ungrouped__" /><el-option v-for="group in workerGroups" :key="group.name" :label="group.name" :value="group.name" /></el-select><el-button v-if="activePlatform === 'android'" size="small" @click="openGroupDialog">分组管理</el-button><el-button v-if="activePlatform === 'android'" size="small" type="primary" plain :icon="Tools" @click="openConfigDrawer">支付宝与设备管理</el-button><el-button v-if="activePlatform === 'android'" size="small" plain :icon="Aim" @click="openPriorityDrawer">上游公司 · 绑组</el-button></div><div class="toolbar-right"><span class="online-label"><span class="online-dot"></span> 当前在线 {{ filteredWorkers.length }}</span></div></div>
 
         <div class="worker-table">
           <el-table :data="pageWorkers" row-key="id" stripe :header-cell-style="tableHeaderStyle" empty-text="暂无在线 Worker">
@@ -326,6 +326,37 @@
       </el-tabs>
     </el-drawer>
 
+    <!-- 上游公司 · 绑组：按登录 Token 推断租户 -->
+    <el-drawer v-model="priorityDrawerVisible" title="上游公司 · 绑组" size="860px" direction="rtl" append-to-body class="config-drawer priority-drawer">
+      <div class="config-tenant priority-scope">
+        安卓派单优先级：<strong>充值平台绑定设备</strong> &gt; <strong>上游公司对应组</strong> &gt; 租户 schedule（auto / manual / group）。此处维护上游公司与本地组的绑定，按<strong>当前登录租户</strong>生效；充值平台的设备绑定请在「参数管控 → 平台」中配置。
+      </div>
+      <div class="config-toolbar">
+        <el-input v-model="companyKeyword" :prefix-icon="Search" placeholder="搜索公司编号 / 名称 / 已绑组" clearable />
+        <el-button :icon="Refresh" :loading="companyLoading" @click="loadUpstreamCompanies">刷新</el-button>
+        <el-button type="primary" plain :loading="companySyncing" @click="syncUpstreamCompanies">同步公司</el-button>
+      </div>
+      <el-table :data="filteredUpstreamCompanies" max-height="520" stripe empty-text="暂无上游公司，请先同步">
+        <el-table-column label="公司编号" min-width="135"><template #default="{ row }"><strong class="config-strong mono">{{ row.companyId || '-' }}</strong></template></el-table-column>
+        <el-table-column label="公司名称" min-width="155"><template #default="{ row }">{{ row.companyName || '-' }}</template></el-table-column>
+        <el-table-column label="状态" min-width="80"><template #default="{ row }"><el-tag effect="plain" size="small">{{ row.status ?? '-' }}</el-tag></template></el-table-column>
+        <el-table-column label="已绑本地组" min-width="140"><template #default="{ row }"><span v-if="row.group" class="group-badge">{{ row.group }}</span><el-tag v-else type="info" effect="plain" size="small">未绑定</el-tag></template></el-table-column>
+        <el-table-column label="同步时间" min-width="155"><template #default="{ row }">{{ formatBoundAt(row.syncedAt) }}</template></el-table-column>
+        <el-table-column label="操作" min-width="205" fixed="right" align="center"><template #default="{ row }"><div class="config-actions">
+          <template v-if="row.editing">
+            <el-select v-model="row.editGroup" size="small" clearable placeholder="选择本地组" class="company-group-select"><el-option v-for="g in workerGroups" :key="g.name" :label="g.name" :value="g.name" /></el-select>
+            <el-button size="small" type="primary" :loading="companySavingId === row.companyId" @click="saveCompanyGroup(row)">保存</el-button>
+            <el-button size="small" @click="cancelCompanyEdit(row)">取消</el-button>
+          </template>
+          <template v-else>
+            <el-button size="small" type="primary" plain @click="startCompanyEdit(row)">绑组</el-button>
+            <el-button size="small" type="danger" plain :disabled="!row.group || companySavingId === row.companyId" @click="unbindCompanyGroup(row)">解绑</el-button>
+          </template>
+        </div></template></el-table-column>
+      </el-table>
+      <div class="config-footnote">一组只能绑一家公司；解绑传 group: ""。同步需先在外部货源设置配置 companyListUrl，也可由上游推送 /open/api/v1/company_sync。buy 带 outerCompanyId 时按公司对应组覆盖组调度。</div>
+    </el-drawer>
+
     <el-dialog v-model="passwordDialogVisible" title="设置支付密码" width="430px" class="fixed-body-dialog" align-center append-to-body :close-on-click-modal="false">
       <div class="password-account">支付宝账号：<strong>{{ passwordForm.alipayAccount }}</strong></div>
       <el-input v-model="passwordForm.password" type="password" show-password placeholder="请输入支付密码明文" maxlength="32" clearable @keyup.enter="submitPassword" />
@@ -359,7 +390,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Connection, Link, Monitor, Iphone, User, UserFilled, Grid, Refresh, Search, CircleCheck, DataAnalysis, FullScreen, Operation, Aim, Plus, Check, Loading, InfoFilled, CopyDocument, Collection, Tools, Key } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
-import { getWorkerList, saveWorkerSchedule, disconnectWorkerApi, androidGroupList, androidGroupSave, androidGroupDelete, androidGroupAssign, alipayAccountList, alipayAccountSave, setAlipayAccountPassword, androidDeviceList, androidDeviceBindAlipay, getAlipayBalanceThreshold, setAlipayBalanceThreshold, createManualRecharge, getManualRechargeList, getAlipayBalanceLedger } from '@/api/api.js'
+import { getWorkerList, saveWorkerSchedule, disconnectWorkerApi, androidGroupList, androidGroupSave, androidGroupDelete, androidGroupAssign, alipayAccountList, alipayAccountSave, setAlipayAccountPassword, androidDeviceList, androidDeviceBindAlipay, getAlipayBalanceThreshold, setAlipayBalanceThreshold, createManualRecharge, getManualRechargeList, getAlipayBalanceLedger, upstreamCompanyList, upstreamCompanyBindGroup, upstreamCompanySync } from '@/api/api.js'
 
 const workers = ref([])
 const scheduleConfigs = ref({})
@@ -423,6 +454,13 @@ const accountSaving = ref(false)
 const bindDialogVisible = ref(false)
 const bindForm = ref({ deviceId: '', currentAccount: '', target: '' })
 const bindSaving = ref(false)
+/* 上游公司 · 绑组；接口按登录 Token 推断租户 */
+const priorityDrawerVisible = ref(false)
+const upstreamCompanies = ref([])
+const companyLoading = ref(false)
+const companySyncing = ref(false)
+const companySavingId = ref('')
+const companyKeyword = ref('')
 const balanceThreshold = ref(null)
 const balanceEnabled = ref(false)
 const thresholdInput = ref('')
@@ -466,6 +504,16 @@ const filteredAndroidDevices = computed(() => {
 const thresholdText = computed(() => {
   if (!balanceEnabled.value || balanceThreshold.value === null || balanceThreshold.value === undefined) return '未启用'
   return String(balanceThreshold.value)
+})
+
+const filteredUpstreamCompanies = computed(() => {
+  const keyword = companyKeyword.value.trim().toLowerCase()
+  if (!keyword) return upstreamCompanies.value
+  return upstreamCompanies.value.filter(item =>
+    String(item.companyId).toLowerCase().includes(keyword) ||
+    item.companyName.toLowerCase().includes(keyword) ||
+    item.group.toLowerCase().includes(keyword)
+  )
 })
 
 const statistics = computed(() => {
@@ -865,6 +913,94 @@ function openConfigDrawer() {
   loadBalanceThreshold()
   loadAlipayAccounts()
   loadAndroidDevices()
+}
+
+/* ===== 上游公司 · 绑组 ===== */
+function openPriorityDrawer() {
+  priorityDrawerVisible.value = true
+  loadUpstreamCompanies()
+}
+
+async function loadUpstreamCompanies() {
+  companyLoading.value = true
+  try {
+    const res = await upstreamCompanyList()
+    const list = Array.isArray(res?.list) ? res.list : (Array.isArray(res) ? res : [])
+    upstreamCompanies.value = list.map(item => ({
+      companyId: String(item.companyId || item.id || ''),
+      companyName: String(item.companyName || item.name || ''),
+      status: item.status ?? '-',
+      group: String(item.group || ''),
+      syncedAt: item.syncedAt || '',
+      editing: false,
+      editGroup: '',
+    }))
+  } catch (error) {
+    console.error('获取上游公司列表失败:', error)
+    ElMessage.error(error?.message || '获取上游公司列表失败')
+  } finally { companyLoading.value = false }
+}
+
+async function syncUpstreamCompanies() {
+  if (companySyncing.value) return
+  companySyncing.value = true
+  try {
+    await upstreamCompanySync()
+    ElMessage.success('上游公司同步完成')
+    await loadUpstreamCompanies()
+  } catch (error) {
+    console.error('同步上游公司失败:', error)
+    ElMessage.error(error?.message || '同步上游公司失败')
+  } finally { companySyncing.value = false }
+}
+
+function startCompanyEdit(row) {
+  row.editGroup = row.group || ''
+  row.editing = true
+}
+
+function cancelCompanyEdit(row) {
+  row.editing = false
+  row.editGroup = ''
+}
+
+async function saveCompanyGroup(row) {
+  const group = String(row.editGroup || '').trim()
+  if (!group) return ElMessage.warning('请选择本地组')
+  // 文档规则：一组只能绑一家公司，本地先拦一道，避免后端报错
+  const occupied = upstreamCompanies.value.find(item => item.companyId !== row.companyId && item.group === group)
+  if (occupied) return ElMessage.warning(`分组「${group}」已绑定公司「${occupied.companyName || occupied.companyId}」`)
+  if (companySavingId.value) return
+  companySavingId.value = row.companyId
+  try {
+    await upstreamCompanyBindGroup({ companyId: row.companyId, group })
+    ElMessage.success('公司分组已绑定')
+    await loadUpstreamCompanies()
+  } catch (error) {
+    console.error('绑定上游公司分组失败:', error)
+    ElMessage.error(error?.message || '绑定上游公司分组失败')
+  } finally { companySavingId.value = '' }
+}
+
+async function unbindCompanyGroup(row) {
+  if (!row.group) return
+  try {
+    await ElMessageBox.confirm(
+      `确定解绑公司「${row.companyName || row.companyId}」与分组「${row.group}」的绑定吗？解绑后该公司订单不再按对应组派单。`,
+      '解绑上游公司分组',
+      { confirmButtonText: '确认解绑', cancelButtonText: '取消', type: 'warning' }
+    )
+  } catch { return }
+  if (companySavingId.value) return
+  companySavingId.value = row.companyId
+  try {
+    await upstreamCompanyBindGroup({ companyId: row.companyId, group: '' })
+    ElMessage.success('已解绑')
+    await loadUpstreamCompanies()
+  } catch (error) {
+    console.error('解绑上游公司分组失败:', error)
+    ElMessage.error(error?.message || '解绑上游公司分组失败')
+  } finally { companySavingId.value = '' }
 }
 
 async function loadAlipayAccounts() {
@@ -1561,9 +1697,14 @@ html.dark .permission-badge.blocked {
 .balance-pair { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; font-size: 11px; color: var(--app-text-secondary); }
 .balance-arrow { color: var(--app-text-muted); }
 .balance-unknown-text { color: var(--app-text-muted); }
+/* 上游公司 · 绑组抽屉 */
+.priority-scope { line-height: 1.7; white-space: normal; }
+.priority-scope strong { color: var(--app-text-primary); }
+.company-group-select { width: 128px; }
 @media(max-width:700px){
   .config-toolbar .el-input{width:100%}
   .config-toolbar .el-select{flex:1;min-width:120px}
+  .company-group-select{width:110px}
   .manual-form-grid{grid-template-columns:1fr}
   .manual-field>span{width:86px}
   .manual-date-range{width:100%}

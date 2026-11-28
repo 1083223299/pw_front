@@ -270,6 +270,36 @@ export async function configDelete(id) {
 }
 
 /* ==================================================
+   派单优先级：上游公司绑组 / 充值平台绑定设备
+   这些接口按登录 Token 推断租户，不传 tenantId
+   ================================================== */
+
+/** 上游公司列表，data.list[]：companyId/companyName/status/group/syncedAt */
+export async function upstreamCompanyList() {
+    return requestData('post', '/v1/upstream_company/list', {}, '获取上游公司列表报错')
+}
+
+/** 上游公司与本地组一对一绑定；group 传空字符串 = 解绑 */
+export async function upstreamCompanyBindGroup(payload) {
+    return requestData('post', '/v1/upstream_company/bind_group', payload, '绑定上游公司分组报错')
+}
+
+/** 主动拉取上游全量公司，需先在外部货源设置配置 companyListUrl */
+export async function upstreamCompanySync() {
+    return requestData('post', '/v1/upstream_company/sync', {}, '同步上游公司报错')
+}
+
+/** 充值平台已绑定设备，入参 { platformId } */
+export async function platformDeviceList(payload) {
+    return requestData('post', '/v1/platform_device/list', payload, '获取平台绑定设备报错')
+}
+
+/** 全量覆盖保存平台绑定设备，入参 { platformId, deviceIds }；deviceIds: [] = 清空绑定 */
+export async function platformDeviceSave(payload) {
+    return requestData('post', '/v1/platform_device/save', payload, '保存平台绑定设备报错')
+}
+
+/* ==================================================
    全局差额亏损限制
    ================================================== */
 

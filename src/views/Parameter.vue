@@ -534,6 +534,44 @@
             />
           </div>
         </el-form-item>
+
+        <!-- =========================
+             绑定设备（充值平台与安卓设备的派单绑定）
+             ========================= -->
+        <el-form-item label="绑定设备">
+          <el-select
+              v-model="platformForm.deviceIds"
+              multiple
+              filterable
+              default-first-option
+              collapse-tags
+              collapse-tags-tooltip
+              clearable
+              :loading="platformDeviceLoading"
+              placeholder="从设备列表搜索并选择 deviceId，可多选"
+              style="width: 100%"
+              @change="markDeviceSelectionDirty"
+              @clear="markDeviceSelectionDirty"
+          >
+            <el-option
+                v-for="device in platformDeviceOptions"
+                :key="device.deviceId"
+                :label="device.deviceId"
+                :value="device.deviceId"
+            >
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+                <span>{{ device.deviceId }}</span>
+                <span :style="{ fontSize: '11px', color: device.online ? '#22a06b' : 'var(--app-text-muted)' }">
+                  {{ device.online ? '在线' : '离线' }}
+                </span>
+              </div>
+            </el-option>
+          </el-select>
+          <div class="form-tip">
+            留空或清空 = 不限制设备，按上游公司组 / 派单策略派单；选中后该平台仅从这些安卓设备派单。
+            设备列表按当前登录租户从 android_device/list 读取，请从列表中选择 deviceId，不要手填手机号 / 支付宝账号；平台与设备的绑定关系统一在此维护。
+          </div>
+        </el-form-item>
       </el-form>
 
       <template #footer>
@@ -634,9 +672,13 @@ import {
   platformList,
   platformSave,
   platformDelete,
+  androidDeviceList,
+  platformDeviceList,
+  platformDeviceSave,
   outerSettingGet,
   outerSettingSave,
 } from '@/api/api.js'
+import { useAuthStore } from '@/stores/auth'
 
 
 // ======================================================
@@ -803,7 +845,17 @@ export default {
         icon: '',
         color: 'blue',
         enabled: true,
+        // 该平台绑定的安卓设备号；通过 platform_device 接口读写
+        deviceIds: [],
       },
+
+      // ==================================================
+      // 平台绑定设备（弹窗内）
+      // ==================================================
+      platformDeviceOptions: [],
+      platformDeviceLoading: false,
+      // 只有用户主动改动过设备选择才提交全量覆盖，避免误清空已有绑定
+      deviceSelectionDirty: false,
     }
   },
 
@@ -1004,8 +1056,11 @@ export default {
         icon: '',
         color: 'blue',
         enabled: true,
+        deviceIds: [],
       }
+      this.resetPlatformDeviceState()
       this.platformDialogVisible = true
+      this.loadPlatformDeviceOptions()
     },
 
     // ==================================================
@@ -1045,6 +1100,73 @@ export default {
 
 
     // ==================================================
+    // 平台绑定设备：选项 / 回显 / 脏标记
+    // ==================================================
+    resetPlatformDeviceState() {
+      this.platformDeviceOptions = []
+      this.platformDeviceLoading = false
+      this.deviceSelectionDirty = false
+    },
+
+    currentLoginTenantId() {
+      let tenantId = ''
+      try {
+        const auth = useAuthStore()
+        tenantId = auth?.tenantId || ''
+      } catch (error) {
+        console.warn('读取登录租户失败:', error)
+      }
+      return String(tenantId || localStorage.getItem('tenant_id') || '')
+    },
+
+    markDeviceSelectionDirty() {
+      this.deviceSelectionDirty = true
+    },
+
+    /** 设备全集：数据源为 android_device/list（含离线设备） */
+    async loadPlatformDeviceOptions() {
+      const tenantId = this.currentLoginTenantId()
+      this.platformDeviceLoading = true
+      try {
+        const res = await androidDeviceList({ tenantId })
+        const list = Array.isArray(res?.list) ? res.list
+          : (Array.isArray(res?.data?.list) ? res.data.list : (Array.isArray(res) ? res : []))
+        this.platformDeviceOptions = list
+          .map(item => ({
+            deviceId: String(item.deviceId || item.device || ''),
+            online: Boolean(item.online),
+          }))
+          .filter(item => item.deviceId)
+      } catch (error) {
+        // 已不允许手输设备号，列表拉取失败要明确提示，避免用户以为可以自己填
+        console.error('获取可选设备列表失败:', error)
+        ElMessage.warning('获取设备列表失败，暂无法选择设备，请稍后重试或检查当前租户配置')
+      } finally {
+        this.platformDeviceLoading = false
+      }
+    },
+
+    /** 编辑时回显已绑定设备；读取失败保持「未改动」，避免全量覆盖误清空 */
+    async loadBoundPlatformDevices(platformId) {
+      if (!platformId) return
+      try {
+        const res = await platformDeviceList({ platformId })
+        const raw = Array.isArray(res?.deviceIds) ? res.deviceIds
+          : (Array.isArray(res?.list) ? res.list : (Array.isArray(res) ? res : []))
+        const ids = raw
+          .map(item => typeof item === 'string' ? item : String(item.deviceId || ''))
+          .filter(Boolean)
+        // 用户已在异步期间改过选择，则不再覆盖
+        if (this.deviceSelectionDirty) return
+        this.platformForm.deviceIds = ids
+        this.deviceSelectionDirty = false
+      } catch (error) {
+        console.error('获取平台绑定设备失败:', error)
+        ElMessage.warning('读取该平台已绑定设备失败，如需保留原绑定请勿修改「绑定设备」')
+      }
+    },
+
+    // ==================================================
     // 编辑平台
     // ==================================================
     editPlatform(platform) {
@@ -1060,9 +1182,12 @@ export default {
         icon: option?.icon || platform.icon || '',
         color: option?.color || platform.color || 'blue',
         enabled: platform.enabled !== false,
+        deviceIds: [],
       }
+      this.resetPlatformDeviceState()
       this.platformDialogVisible = true
-
+      this.loadPlatformDeviceOptions()
+      this.loadBoundPlatformDevices(platform.id)
     },
 
     async savePlatform() {
@@ -1078,6 +1203,17 @@ export default {
       this.savingPlatform = true
 
       try {
+        let platformId = this.platformForm.id || ''
+        // 保存前统一去空白 + 去重，避免同一个 deviceId 被重复提交
+        // （后端 uk_tenant_plat_device 唯一键 + deviceIds 真实性校验，手填值会被拒绝）
+        const deviceIds = [...new Set(
+          (this.platformForm.deviceIds || [])
+            .map(id => String(id ?? '').trim())
+            .filter(Boolean)
+        )]
+        // 全量覆盖接口很敏感：只有用户主动改过设备选择才提交
+        const needSaveDevices = this.deviceSelectionDirty
+
         // ==================== 编辑 ====================
         if (this.platformForm.id) {
           await platformSave({
@@ -1092,18 +1228,37 @@ export default {
 
         } else {
           // ==================== 新增 ====================
-          await platformSave({
+          // 后端契约：platform/save 成功后 data 返回 { id: <平台id> }（新增、编辑均返回）
+          const res = await platformSave({
             sopName: name,
             sopDescription: description,
             sopEnabled: true,
             sopFlag: this.platformForm.flag,
           })
-
+          platformId = res?.id ?? ''
           ElMessage.success(`「${name}」平台添加成功`)
         }
 
-        this.platformDialogVisible = false
+        // 刷新平台列表
         await this.fetchPlatforms()
+
+        this.platformDialogVisible = false
+
+        // 设备绑定单独处理：失败不影响已保存的平台信息
+        if (needSaveDevices) {
+          if (!platformId) {
+            // 防御分支：仅当后端仍是旧版接口、新增未返回 id 时才会走到
+            ElMessage.warning('平台已保存，但未获取到平台 ID，请重新打开该平台的编辑弹窗，在「绑定设备」中配置')
+          } else {
+            try {
+              await platformDeviceSave({ platformId, deviceIds })
+              ElMessage.success('平台设备绑定已保存')
+            } catch (error) {
+              console.error('保存平台绑定设备失败:', error)
+              ElMessage.error(`平台已保存，但设备绑定失败：${error?.message || '请稍后重试'}`)
+            }
+          }
+        }
 
       } catch (error) {
         console.error('保存平台失败:', error)
