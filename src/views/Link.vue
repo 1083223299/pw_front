@@ -339,7 +339,7 @@
       <el-table :data="filteredUpstreamCompanies" max-height="520" stripe empty-text="暂无上游公司，请先同步">
         <el-table-column label="公司编号" min-width="135"><template #default="{ row }"><strong class="config-strong mono">{{ row.companyId || '-' }}</strong></template></el-table-column>
         <el-table-column label="公司名称" min-width="155"><template #default="{ row }">{{ row.companyName || '-' }}</template></el-table-column>
-        <el-table-column label="状态" min-width="80"><template #default="{ row }"><el-tag effect="plain" size="small">{{ row.status ?? '-' }}</el-tag></template></el-table-column>
+        <el-table-column label="状态" min-width="80"><template #default="{ row }"><el-tag effect="plain" size="small" :type="row.statusType">{{ row.statusText }}</el-tag></template></el-table-column>
         <el-table-column label="已绑本地组" min-width="140"><template #default="{ row }"><span v-if="row.group" class="group-badge">{{ row.group }}</span><el-tag v-else type="info" effect="plain" size="small">未绑定</el-tag></template></el-table-column>
         <el-table-column label="同步时间" min-width="155"><template #default="{ row }">{{ formatBoundAt(row.syncedAt) }}</template></el-table-column>
         <el-table-column label="操作" min-width="205" fixed="right" align="center"><template #default="{ row }"><div class="config-actions">
@@ -921,20 +921,37 @@ function openPriorityDrawer() {
   loadUpstreamCompanies()
 }
 
+/** 后端枚举：1 = 启用，0 = 停用；未知值兜底显示原值，不臆断映射 */
+const COMPANY_STATUS_MAP = {
+  '1': { text: '启用', type: 'success' },
+  '0': { text: '停用', type: 'info' },
+}
+
+function normalizeCompanyStatus(raw) {
+  const hit = COMPANY_STATUS_MAP[String(raw ?? '').trim()]
+  if (hit) return hit
+  return { text: raw === null || raw === undefined || raw === '' ? '-' : String(raw), type: 'info' }
+}
+
 async function loadUpstreamCompanies() {
   companyLoading.value = true
   try {
     const res = await upstreamCompanyList()
     const list = Array.isArray(res?.list) ? res.list : (Array.isArray(res) ? res : [])
-    upstreamCompanies.value = list.map(item => ({
-      companyId: String(item.companyId || item.id || ''),
-      companyName: String(item.companyName || item.name || ''),
-      status: item.status ?? '-',
-      group: String(item.group || ''),
-      syncedAt: item.syncedAt || '',
-      editing: false,
-      editGroup: '',
-    }))
+    upstreamCompanies.value = list.map(item => {
+      const statusView = normalizeCompanyStatus(item.status)
+      return {
+        companyId: String(item.companyId || item.id || ''),
+        companyName: String(item.companyName || item.name || ''),
+        status: item.status ?? '-',
+        statusText: statusView.text,
+        statusType: statusView.type,
+        group: String(item.group || ''),
+        syncedAt: item.syncedAt || '',
+        editing: false,
+        editGroup: '',
+      }
+    })
   } catch (error) {
     console.error('获取上游公司列表失败:', error)
     ElMessage.error(error?.message || '获取上游公司列表失败')
