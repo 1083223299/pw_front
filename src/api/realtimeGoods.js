@@ -7,7 +7,7 @@ export async function getNeteaseGoods(platform, accountOverride = '') {
   const config = NETEASE_GAMES[platform]
   if (!config) throw new Error(`未知游戏：${platform}`)
   if (!NETEASE_COOKIE || NETEASE_COOKIE.startsWith('请填写')) throw new Error('请先在 neteaseGames.js 配置有效 Cookie')
-  // 大话西游原 H5 的 account / channel / gameCode 是未启用的，按原逻辑仅传有效字段。
+  // 大话西游原的 account / channel / gameCode 是未启用的，按原逻辑仅传有效字段。
   const payload = { cookie: NETEASE_COOKIE, apiBase: config.apiBase }
   const account = accountOverride.trim() || config.account
   if (account) payload.account = account

@@ -334,6 +334,35 @@ export async function androidGroupAssign(payload) {
     return requestData('post', '/v1/android_group/assign', payload, '分配设备分组报错')
 }
 
+export async function alipayAccountList(payload) {
+    return requestData('post', '/v1/alipay_account/list', payload, '获取支付宝账号列表报错')
+}
+
+export async function alipayAccountSave(payload) {
+    return requestData('post', '/v1/alipay_account/save', payload, '新增支付宝账号报错')
+}
+
+export async function setAlipayAccountPassword(payload) {
+    return requestData('post', '/v1/alipay_account/set_password', payload, '设置支付宝密码报错')
+}
+
+export async function androidDeviceList(payload) {
+    return requestData('post', '/v1/android_device/list', payload, '获取安卓设备列表报错')
+}
+
+export async function androidDeviceBindAlipay(payload) {
+    return requestData('post', '/v1/android_device/bind_alipay', payload, '绑定设备支付宝报错')
+}
+
+// 余额预警阈值：get / set 均为空 body 或仅 threshold，租户由登录 Token 推断
+export async function getAlipayBalanceThreshold() {
+    return requestData('post', '/v1/alipay_balance_threshold/get', {}, '获取余额预警阈值报错')
+}
+
+export async function setAlipayBalanceThreshold(payload) {
+    return requestData('post', '/v1/alipay_balance_threshold/set', payload, '设置余额预警阈值报错')
+}
+
 export async function saveWorkerSchedule(obj) {
     return requestData('post', '/v1/schedule', obj, '保存 Worker 排班报错')
 }
@@ -375,6 +404,28 @@ export async function tenantBalanceRecharge(payload) {
 /** 租户余额流水分页 */
 export async function tenantBalanceLedger(payload) {
     return requestData('post', '/v1/tenant_balance/ledger', payload, '读取余额流水失败')
+}
+
+/* ==================================================
+   人工充值单 · 支付宝余额扣除流水
+   注意：这里扣的是「支付宝账号余额」(alipay_account/list 的 balance)，
+   与上方「租户余额」(tenant_balance/*，租户预付余额 / 人工加款) 是两套账；
+   接口均不传 tenantId，租户由登录 Token 推断。
+   ================================================== */
+
+/** 新建人工充值单：手机人工支付完成后记账，扣对应支付宝账号余额 */
+export async function createManualRecharge(payload) {
+    return requestData('post', '/v1/manual_recharge/create', payload, '新建人工充值单报错')
+}
+
+/** 人工充值单分页列表 */
+export async function getManualRechargeList(payload) {
+    return requestData('post', '/v1/manual_recharge/list', payload, '读取人工充值单列表报错')
+}
+
+/** 支付宝余额扣除流水分页（changeType=manual_deduct，amount 为负数） */
+export async function getAlipayBalanceLedger(payload) {
+    return requestData('post', '/v1/alipay_balance_ledger/list', payload, '读取支付宝余额流水报错')
 }
 
 export async function exportFinance(obj) {

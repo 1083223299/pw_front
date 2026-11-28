@@ -64,7 +64,9 @@
               </template>
               <template v-else-if="scheduleForm.mode === 'group'">
                 <el-select v-model="scheduleForm.groups" multiple collapse-tags collapse-tags-tooltip placeholder="选择派单分组" class="schedule-group-select" :disabled="selectedTenant === null" @change="scheduleDirty = true">
-                  <el-option v-for="group in workerGroups" :key="group.name" :label="group.name" :value="group.name" />
+                  <el-option v-for="group in workerGroups" :key="group.name" :label="group.name" :value="group.name">
+                    <div class="group-option"><span>{{ group.name }}</span><span class="group-option-online">在线 {{ group.onlineCount ?? 0 }}</span></div>
+                  </el-option>
                 </el-select>
               </template>
             </div>
@@ -74,14 +76,15 @@
           </div>
         </div>
 
-        <div class="worker-toolbar"><div class="toolbar-left"><el-input v-model="workerKeyword" :prefix-icon="Search" placeholder="搜索 WorkID / 租户 / 任务" clearable class="worker-search" /><el-select v-model="statusFilter" placeholder="全部状态" clearable class="status-filter"><el-option label="空闲" value="idle" /><el-option label="执行中" value="running" /></el-select><el-select v-if="activePlatform === 'android'" v-model="groupFilter" placeholder="全部分组" clearable class="group-filter" @clear="groupFilter = ''"><el-option label="全部分组" value="" /><el-option label="未分组" value="__ungrouped__" /><el-option v-for="group in workerGroups" :key="group.name" :label="group.name" :value="group.name" /></el-select><el-button v-if="activePlatform === 'android'" size="small" @click="openGroupDialog">分组管理</el-button></div><div class="toolbar-right"><span class="online-label"><span class="online-dot"></span> 当前在线 {{ filteredWorkers.length }}</span></div></div>
+        <div class="worker-toolbar"><div class="toolbar-left"><el-input v-model="workerKeyword" :prefix-icon="Search" placeholder="搜索 WorkID / 设备号 / 租户 / 任务" clearable class="worker-search" /><el-select v-model="statusFilter" placeholder="全部状态" clearable class="status-filter"><el-option label="空闲" value="idle" /><el-option label="执行中" value="running" /></el-select><el-select v-if="activePlatform === 'android'" v-model="groupFilter" placeholder="全部分组" clearable class="group-filter" @clear="groupFilter = ''"><el-option label="全部分组" value="" /><el-option label="未分组" value="__ungrouped__" /><el-option v-for="group in workerGroups" :key="group.name" :label="group.name" :value="group.name" /></el-select><el-button v-if="activePlatform === 'android'" size="small" @click="openGroupDialog">分组管理</el-button><el-button v-if="activePlatform === 'android'" size="small" type="primary" plain :icon="Tools" @click="openConfigDrawer">支付宝与设备管理</el-button></div><div class="toolbar-right"><span class="online-label"><span class="online-dot"></span> 当前在线 {{ filteredWorkers.length }}</span></div></div>
 
         <div class="worker-table">
           <el-table :data="pageWorkers" row-key="id" stripe :header-cell-style="tableHeaderStyle" empty-text="暂无在线 Worker">
             <el-table-column label="WorkID" min-width="190"><template #default="{ row }"><div class="worker-id-cell"><el-tooltip :content="row.workerKey" placement="top"><span class="order-link">{{ row.workerKey.split(':')[0].slice(0, 12) }}...</span></el-tooltip><el-icon class="copy-icon" title="复制 WorkID" @click="copyText(row.workerKey)"><CopyDocument /></el-icon></div></template></el-table-column>
             <el-table-column label="租户 ID" min-width="100"><template #default="{ row }">{{ row.tenantId }}</template></el-table-column>
             <el-table-column label="平台" min-width="95"><template #default="{ row }"><span class="platform-badge" :class="row.platform"><el-icon><Monitor v-if="row.platform === 'pc'" /><Iphone v-else /></el-icon>{{ row.platform === 'pc' ? 'PC' : 'Android' }}</span></template></el-table-column>
-            <el-table-column v-if="activePlatform === 'android'" label="付款账号" min-width="145"><template #default="{ row }"><span class="pay-account">{{ row.payAccount || '-' }}</span></template></el-table-column>
+            <el-table-column v-if="activePlatform === 'android'" label="设备号" min-width="160"><template #default="{ row }"><div class="device-id-cell"><el-tooltip :content="row.deviceId || '未上报设备号'" placement="top"><span class="device-id">{{ row.deviceId || '-' }}</span></el-tooltip><el-icon v-if="row.deviceId" class="copy-icon" title="复制设备号" @click="copyText(row.deviceId)"><CopyDocument /></el-icon></div></template></el-table-column>
+            <el-table-column v-if="activePlatform === 'android'" label="付款账号" min-width="145"><template #default="{ row }"><span v-if="row.payAccount" class="pay-account">{{ row.payAccount }}</span><span v-else class="pay-account unbound">未绑定</span></template></el-table-column>
             <el-table-column v-if="activePlatform === 'android'" label="分组" min-width="120"><template #default="{ row }"><span class="group-badge" :class="{ ungrouped: !row.group }">{{ row.group || '未分组' }}</span></template></el-table-column>
             <el-table-column label="连接状态" min-width="100"><template #default><span class="connection-status"><span class="online-dot"></span>在线</span></template></el-table-column>
             <el-table-column label="执行状态" min-width="100"><template #default="{ row }"><span class="running-badge" :class="row.isRunning ? 'busy' : 'idle'"><el-icon v-if="row.isRunning"><Loading /></el-icon>{{ row.isRunning ? '执行中' : '空闲' }}</span></template></el-table-column>
@@ -96,7 +99,7 @@
         <div class="mobile-worker-list">
           <div v-for="row in pageWorkers" :key="row.id" class="mobile-worker-card">
             <div class="mobile-worker-top"><div class="mobile-worker-name"><strong>{{ row.workId }}</strong></div><span class="running-badge" :class="row.isRunning ? 'busy' : 'idle'">{{ row.isRunning ? '执行中' : '空闲' }}</span></div>
-            <div class="mobile-worker-info"><div><span>租户</span><strong>{{ row.tenantId }}</strong></div><div><span>平台</span><strong>{{ row.platform }}</strong></div><div v-if="row.platform === 'android'"><span>付款账号</span><strong>{{ row.payAccount }}</strong></div><div v-if="row.platform === 'android'"><span>分组</span><strong>{{ row.group || '未分组' }}</strong></div><div><span>当前任务</span><strong v-if="row.orderId" class="mobile-task-order"><button class="order-link task-order-link" @click="openOrder(row.orderId)">{{ row.orderId }}</button><el-icon class="copy-icon" title="复制订单号" @click.stop="copyText(row.orderId)"><CopyDocument /></el-icon></strong><strong v-else>-</strong></div><div><span>调度权限</span><span class="permission-badge" :class="isWorkerAllowed(row) ? 'allowed' : 'blocked'">{{ isWorkerAllowed(row) ? '允许' : '未选中' }}</span></div><div><span>连接时长</span><strong>{{ formatDuration(row.connectedAt) }}</strong></div><div><span>最后心跳</span><strong class="heartbeat-value" :class="getHeartbeatClass(row.lastHeartbeat)">{{ formatHeartbeat(row.lastHeartbeat) }}</strong></div></div>
+            <div class="mobile-worker-info"><div><span>租户</span><strong>{{ row.tenantId }}</strong></div><div><span>平台</span><strong>{{ row.platform }}</strong></div><div v-if="row.platform === 'android'"><span>设备号</span><strong class="mono">{{ row.deviceId || '-' }}</strong></div><div v-if="row.platform === 'android'"><span>付款账号</span><strong :class="{ 'unbound-text': !row.payAccount }">{{ row.payAccount || '未绑定' }}</strong></div><div v-if="row.platform === 'android'"><span>分组</span><strong>{{ row.group || '未分组' }}</strong></div><div><span>当前任务</span><strong v-if="row.orderId" class="mobile-task-order"><button class="order-link task-order-link" @click="openOrder(row.orderId)">{{ row.orderId }}</button><el-icon class="copy-icon" title="复制订单号" @click.stop="copyText(row.orderId)"><CopyDocument /></el-icon></strong><strong v-else>-</strong></div><div><span>调度权限</span><span class="permission-badge" :class="isWorkerAllowed(row) ? 'allowed' : 'blocked'">{{ isWorkerAllowed(row) ? '允许' : '未选中' }}</span></div><div><span>连接时长</span><strong>{{ formatDuration(row.connectedAt) }}</strong></div><div><span>最后心跳</span><strong class="heartbeat-value" :class="getHeartbeatClass(row.lastHeartbeat)">{{ formatHeartbeat(row.lastHeartbeat) }}</strong></div></div>
             <div class="mobile-worker-actions"><el-button v-if="row.platform === 'android'" size="small" type="warning" plain @click="openAssignDialog(row)">设组</el-button><el-button size="small" type="primary" plain @click="setOnlyWorker(row)">指定执行</el-button><el-button class="detail-action" size="small" @click="showDetail(row)">详情</el-button><el-button size="small" type="danger" plain @click="disconnectWorker(row)">断开</el-button></div>
           </div>
           <el-empty v-if="pageWorkers.length === 0" description="暂无在线 Worker" />
@@ -137,7 +140,8 @@
           <div class="detail-row"><span>WorkID</span><strong class="mono">{{ detailWorker.workId }}</strong></div>
           <div class="detail-row"><span>租户 ID</span><strong>{{ detailWorker.tenantId }}</strong></div>
           <div class="detail-row"><span>平台</span><strong>{{ detailWorker.platform === 'pc' ? 'PC' : 'Android' }}</strong></div>
-          <div v-if="detailWorker.platform === 'android'" class="detail-row"><span>付款账号</span><strong>{{ detailWorker.payAccount || '-' }}</strong></div>
+          <div v-if="detailWorker.platform === 'android'" class="detail-row"><span>设备号</span><strong class="mono">{{ detailWorker.deviceId || '-' }}</strong></div>
+          <div v-if="detailWorker.platform === 'android'" class="detail-row"><span>付款账号</span><strong :class="{ 'unbound-text': !detailWorker.payAccount }">{{ detailWorker.payAccount || '未绑定' }}</strong></div>
           <div v-if="detailWorker.platform === 'android'" class="detail-row"><span>分组</span><strong>{{ detailWorker.group || '未分组' }}</strong></div>
           <div class="detail-row"><span>当前任务</span><strong>{{ detailWorker.orderId || '-' }}</strong></div>
           <div class="detail-row"><span>连接时间</span><strong>{{ formatDate(detailWorker.connectedAt) }}</strong></div>
@@ -168,7 +172,11 @@
     </el-dialog>
 
     <el-dialog v-model="assignVisible" title="设置设备分组" width="460px" class="fixed-body-dialog" align-center append-to-body>
-      <div class="assign-info">付款账号：{{ assignWorker?.payAccount || '-' }}</div>
+      <div class="assign-info">
+        <div><span>设备号</span><strong class="mono">{{ assignWorker?.deviceId || '-' }}</strong></div>
+        <div><span>当前付款账号</span><strong :class="{ 'unbound-text': !assignWorker?.payAccount }">{{ assignWorker?.payAccount || '未绑定' }}</strong></div>
+      </div>
+      <div class="assign-hint">分组以设备号为准，换绑支付宝不会影响已有分组。</div>
       <el-select v-model="assignTarget" class="assign-select" @change="onAssignTargetChange">
         <el-option label="未分组" value="__ungrouped__" />
         <el-option v-for="group in workerGroups" :key="group.name" :label="group.name" :value="group.name" />
@@ -180,16 +188,178 @@
         <el-button type="primary" :loading="assignSaving" @click="confirmAssign">保存</el-button>
       </template>
     </el-dialog>
+
+    <el-drawer v-model="configDrawerVisible" title="支付宝与设备管理" size="860px" direction="rtl" append-to-body class="config-drawer">
+      <div class="config-tenant">
+        当前租户：<strong>{{ configTenantId || '未选择' }}</strong>
+        <span v-if="!configTenantId" class="config-tenant-hint">请先在左侧选择具体租户，再进行账号与设备管理</span>
+      </div>
+      <el-tabs v-model="configActiveTab" class="config-tabs">
+        <el-tab-pane label="支付宝账号与密码" name="alipay">
+          <div class="threshold-panel">
+            <div class="threshold-head"><strong>余额预警阈值</strong><span>租户级统一配置 · 按当前登录租户生效</span></div>
+            <div class="threshold-body">
+              <el-switch v-model="balanceEnabled" active-text="启用" inactive-text="关闭" :loading="thresholdLoading || thresholdSaving" />
+              <el-input v-model="thresholdInput" type="number" min="0" placeholder="阈值金额" class="threshold-input" :disabled="!balanceEnabled" @keyup.enter="saveBalanceThreshold" />
+              <el-button type="primary" :loading="thresholdSaving" @click="saveBalanceThreshold">保存</el-button>
+              <span class="threshold-current">当前：{{ thresholdText }}</span>
+            </div>
+            <div class="threshold-hint">低于阈值时管理端弹窗预警（ALIPAY_BALANCE_LOW，同账号每小时一条），只告警不拦派单；真正余额不足仍走原有拦截。</div>
+          </div>
+          <div class="config-toolbar">
+            <el-input v-model="alipayKeyword" :prefix-icon="Search" placeholder="搜索支付宝账号" clearable />
+            <el-button :icon="Refresh" :loading="alipayLoading" @click="loadAlipayAccounts">刷新</el-button>
+            <el-button type="primary" plain :icon="Plus" :disabled="!configTenantId" @click="openAccountDialog">新增账号</el-button>
+          </div>
+          <el-table :data="filteredAlipayAccounts" max-height="460" stripe empty-text="暂无支付宝账号">
+            <el-table-column label="支付宝账号" min-width="165"><template #default="{ row }"><strong class="config-strong">{{ row.alipayAccount || '-' }}</strong></template></el-table-column>
+            <el-table-column label="密码状态" min-width="100"><template #default="{ row }"><el-tag :type="row.hasPassword ? 'success' : 'warning'" effect="plain" size="small">{{ row.hasPassword ? '已设置' : '未设置' }}</el-tag></template></el-table-column>
+            <el-table-column label="余额" min-width="165"><template #default="{ row }"><div class="balance-cell"><span :class="{ 'balance-low': row.belowThreshold, 'balance-unknown': !row.balanceText || row.balanceText === '暂未获取' }">{{ row.balanceText || '暂未获取' }}</span><el-tag v-if="row.belowThreshold" type="danger" effect="plain" size="small">低于阈值</el-tag></div><div v-if="row.balanceUpdatedAt" class="balance-time">{{ formatBoundAt(row.balanceUpdatedAt) }}</div></template></el-table-column>
+            <el-table-column label="密码回显" min-width="100"><template #default="{ row }"><span class="config-mask">{{ row.passwordMask || '—' }}</span></template></el-table-column>
+            <el-table-column label="操作" min-width="235" fixed="right" align="center"><template #default="{ row }"><div class="config-actions"><el-button size="small" type="primary" plain :icon="Key" :disabled="!configTenantId" @click="openPasswordDialog(row)">设置密码</el-button><el-button size="small" type="danger" plain :disabled="!configTenantId || !row.hasPassword" @click="clearAlipayPassword(row)">清空</el-button><el-button size="small" plain @click="openAccountLedger(row)">流水</el-button></div></template></el-table-column>
+          </el-table>
+          <div class="config-footnote">先新增账号并设密，再到「全部安卓设备」把账号绑定到设备；密码加密写入服务端，列表只返回掩码，前端不保存明文。</div>
+        </el-tab-pane>
+        <el-tab-pane label="全部安卓设备" name="device">
+          <div class="config-toolbar">
+            <el-input v-model="deviceKeyword" :prefix-icon="Search" placeholder="搜索设备号 / 支付宝账号" clearable />
+            <el-select v-model="deviceGroupFilter" placeholder="全部分组" clearable><el-option label="全部分组" value="" /><el-option label="未分组" value="__ungrouped__" /><el-option v-for="group in workerGroups" :key="group.name" :label="group.name" :value="group.name" /></el-select>
+            <el-select v-model="deviceOnlineFilter" placeholder="全部状态" clearable><el-option label="全部状态" value="" /><el-option label="在线" value="online" /><el-option label="离线" value="offline" /></el-select>
+            <el-button :icon="Refresh" :loading="deviceLoading" @click="loadAndroidDevices">刷新</el-button>
+          </div>
+          <el-table :data="filteredAndroidDevices" max-height="520" stripe empty-text="暂无安卓设备">
+            <el-table-column label="设备号" min-width="185"><template #default="{ row }"><div class="device-id-cell"><span class="device-id">{{ row.deviceId || '-' }}</span><el-icon v-if="row.deviceId" class="copy-icon" title="复制设备号" @click="copyText(row.deviceId)"><CopyDocument /></el-icon></div></template></el-table-column>
+            <el-table-column label="当前支付宝" min-width="155"><template #default="{ row }"><span v-if="row.alipayAccount" class="config-strong">{{ row.alipayAccount }}</span><el-tag v-else type="warning" effect="plain" size="small">未绑定</el-tag></template></el-table-column>
+            <el-table-column label="余额" min-width="165"><template #default="{ row }"><div class="balance-cell"><span :class="{ 'balance-low': row.belowThreshold, 'balance-unknown': !row.balanceText || row.balanceText === '暂未获取' }">{{ row.balanceText || '暂未获取' }}</span><el-tag v-if="row.belowThreshold" type="danger" effect="plain" size="small">低于阈值</el-tag></div><div v-if="row.balanceUpdatedAt" class="balance-time">{{ formatBoundAt(row.balanceUpdatedAt) }}</div></template></el-table-column>
+            <el-table-column label="所在分组" min-width="115"><template #default="{ row }"><span class="group-badge" :class="{ ungrouped: !row.group }">{{ row.group || '未分组' }}</span></template></el-table-column>
+            <el-table-column label="在线状态" min-width="95"><template #default="{ row }"><span class="device-status" :class="row.online ? 'online' : 'offline'"><span class="status-dot"></span>{{ row.online ? '在线' : '离线' }}</span></template></el-table-column>
+            <el-table-column label="最近绑定" min-width="160"><template #default="{ row }">{{ formatBoundAt(row.boundAt) }}</template></el-table-column>
+            <el-table-column label="操作" min-width="175" fixed="right" align="center"><template #default="{ row }"><div class="config-actions"><el-button size="small" type="primary" plain :disabled="!row.deviceId || !configTenantId" @click="openBindDialog(row)">绑定支付宝</el-button><el-button size="small" type="warning" plain :disabled="!row.deviceId || !configTenantId" @click="openDeviceAssignDialog(row)">设组</el-button></div></template></el-table-column>
+          </el-table>
+          <div class="config-footnote">设备列表包含离线设备；分组按设备号，派单按设备当前绑定的支付宝取支付密码，未绑定或未设密会导致支付失败。后绑覆盖、换绑不影响已有分组。</div>
+        </el-tab-pane>
+        <el-tab-pane label="人工充值 · 余额流水" name="manual">
+          <div class="config-tenant manual-scope">
+            按当前登录租户记账与查询；扣的是<strong>支付宝账号余额</strong>，不是财务页的「租户预付余额 / 人工加款」。记账前需先在左侧选择具体租户以加载账号列表。
+          </div>
+
+          <div class="manual-form-panel">
+            <div class="manual-form-head"><strong>新建人工充值单</strong><span>手机人工支付完成后在此记账</span></div>
+            <div class="manual-form-grid">
+              <div class="manual-field"><span>支付宝账号</span>
+                <el-select v-model="manualForm.alipayAccount" filterable clearable placeholder="选择付款支付宝账号" :disabled="!configTenantId" class="manual-field-control">
+                  <el-option v-for="item in alipayAccounts" :key="item.alipayAccount" :label="`${item.alipayAccount}（${item.balanceText || '暂未获取'}）`" :value="item.alipayAccount" />
+                </el-select>
+              </div>
+              <div class="manual-field"><span>实付金额</span>
+                <el-input-number v-model="manualForm.amount" :min="0" :precision="2" :step="10" :controls="false" placeholder="大于 0 的金额" class="manual-field-control" />
+              </div>
+              <div class="manual-field"><span>设备号（可选）</span>
+                <el-select v-model="manualForm.deviceId" filterable allow-create default-first-option clearable placeholder="可留空，或选择 / 输入设备号" class="manual-field-control">
+                  <el-option v-for="item in androidDevices" :key="item.deviceId" :label="item.deviceId" :value="item.deviceId" />
+                </el-select>
+              </div>
+            </div>
+            <div class="manual-field manual-field-full"><span>备注（必填）</span><el-input v-model="manualForm.remark" placeholder="如：手机人工支付，订单备注 xxx" maxlength="200" clearable class="manual-field-control" @keyup.enter="submitManualRecharge" /></div>
+            <div class="manual-form-actions">
+              <el-button type="primary" :loading="manualSaving" :disabled="!configTenantId" @click="submitManualRecharge">提交记账</el-button>
+              <el-button @click="resetManualForm">清空</el-button>
+              <span v-if="!configTenantId" class="manual-form-tip">请先在左侧选择具体租户</span>
+            </div>
+            <div v-if="manualResult" class="manual-result">
+              记账成功 · 单号 <strong class="mono">{{ manualResult.rechargeNo || '-' }}</strong>
+              ｜ 扣前 <strong>{{ formatBalance(manualResult.beforeBalance) }}</strong>
+              ｜ 扣后 <strong>{{ formatBalance(manualResult.afterBalance) }}</strong>
+              <span v-if="manualResult.beforeBalance === null || manualResult.beforeBalance === undefined">（余额暂未获取，仍可记账）</span>
+            </div>
+          </div>
+
+          <div class="manual-sub-switch">
+            <el-button size="small" :type="manualSubView === 'orders' ? 'primary' : ''" @click="switchManualSubView('orders')">人工充值单</el-button>
+            <el-button size="small" :type="manualSubView === 'ledger' ? 'primary' : ''" @click="switchManualSubView('ledger')">支付宝扣除流水</el-button>
+          </div>
+
+          <template v-if="manualSubView === 'orders'">
+            <div class="config-toolbar manual-toolbar">
+              <el-input v-model="rechargeFilters.alipayAccount" :prefix-icon="Search" placeholder="支付宝账号" clearable />
+              <el-input v-model="rechargeFilters.deviceId" placeholder="设备号" clearable />
+              <el-date-picker v-model="rechargeFilters.dateRange" type="daterange" range-separator="至" start-placeholder="开始日期" end-placeholder="结束日期" value-format="YYYY-MM-DD" format="YYYY-MM-DD" class="manual-date-range" />
+              <el-button type="primary" :icon="Search" @click="searchRecharge">查询</el-button>
+              <el-button :icon="Refresh" @click="resetRechargeFilters">重置</el-button>
+            </div>
+            <el-table :data="rechargeOrders" v-loading="rechargeLoading" max-height="420" stripe empty-text="暂无人工充值单">
+              <el-table-column label="人工单号" min-width="175"><template #default="{ row }"><span class="config-mask">{{ row.rechargeNo || '-' }}</span></template></el-table-column>
+              <el-table-column label="支付宝账号" min-width="150"><template #default="{ row }"><strong class="config-strong">{{ row.alipayAccount || '-' }}</strong></template></el-table-column>
+              <el-table-column label="金额" min-width="100" align="right"><template #default="{ row }"><span class="amount-strong">¥{{ formatMoney(row.amount) }}</span></template></el-table-column>
+              <el-table-column label="扣前 / 扣后" min-width="185"><template #default="{ row }"><div class="balance-pair"><span :class="{ 'balance-unknown-text': row.beforeBalance === null }">{{ formatBalance(row.beforeBalance) }}</span><span class="balance-arrow">→</span><span :class="{ 'balance-unknown-text': row.afterBalance === null }">{{ formatBalance(row.afterBalance) }}</span></div></template></el-table-column>
+              <el-table-column label="设备号" min-width="150"><template #default="{ row }"><span class="device-id">{{ row.deviceId || '-' }}</span></template></el-table-column>
+              <el-table-column label="备注" min-width="180" show-overflow-tooltip><template #default="{ row }">{{ row.remark || '-' }}</template></el-table-column>
+              <el-table-column label="操作人" min-width="100"><template #default="{ row }">{{ row.operator || '-' }}</template></el-table-column>
+              <el-table-column label="时间" min-width="160"><template #default="{ row }">{{ formatBoundAt(row.createTime) }}</template></el-table-column>
+            </el-table>
+            <div class="manual-pagination"><span>共 {{ rechargeTotal }} 条</span><el-pagination v-model:current-page="rechargePagination.pageIndex" v-model:page-size="rechargePagination.pageSize" :total="rechargeTotal" :page-sizes="[10, 20, 50]" layout="sizes, prev, pager, next" background @size-change="loadRechargeOrders" @current-change="loadRechargeOrders" /></div>
+          </template>
+
+          <template v-else>
+            <div class="config-toolbar manual-toolbar">
+              <el-input v-model="ledgerFilters.alipayAccount" :prefix-icon="Search" placeholder="支付宝账号" clearable />
+              <el-select v-model="ledgerFilters.changeType" placeholder="变动类型" class="manual-type-select"><el-option label="全部类型" value="" /><el-option label="人工扣款" value="manual_deduct" /></el-select>
+              <el-date-picker v-model="ledgerFilters.dateRange" type="daterange" range-separator="至" start-placeholder="开始日期" end-placeholder="结束日期" value-format="YYYY-MM-DD" format="YYYY-MM-DD" class="manual-date-range" />
+              <el-button type="primary" :icon="Search" @click="searchLedger">查询</el-button>
+              <el-button :icon="Refresh" @click="resetLedgerFilters">重置</el-button>
+            </div>
+            <el-table :data="alipayLedgerList" v-loading="ledgerLoading" max-height="420" stripe empty-text="暂无扣除流水">
+              <el-table-column label="关联单号" min-width="175"><template #default="{ row }"><span class="config-mask">{{ row.refNo || '-' }}</span></template></el-table-column>
+              <el-table-column label="支付宝账号" min-width="150"><template #default="{ row }"><strong class="config-strong">{{ row.alipayAccount || '-' }}</strong></template></el-table-column>
+              <el-table-column label="变动金额" min-width="110" align="right"><template #default="{ row }"><span :class="Number(row.amount) < 0 ? 'amount-negative' : 'amount-strong'">{{ Number(row.amount) < 0 ? '-¥' + formatMoney(Math.abs(row.amount)) : '¥' + formatMoney(row.amount) }}</span></template></el-table-column>
+              <el-table-column label="扣前 / 扣后" min-width="185"><template #default="{ row }"><div class="balance-pair"><span :class="{ 'balance-unknown-text': row.beforeBalance === null }">{{ formatBalance(row.beforeBalance) }}</span><span class="balance-arrow">→</span><span :class="{ 'balance-unknown-text': row.afterBalance === null }">{{ formatBalance(row.afterBalance) }}</span></div></template></el-table-column>
+              <el-table-column label="类型" min-width="105"><template #default="{ row }"><el-tag type="danger" effect="plain" size="small">{{ row.changeType === 'manual_deduct' ? '人工扣款' : (row.changeType || '-') }}</el-tag></template></el-table-column>
+              <el-table-column label="备注" min-width="180" show-overflow-tooltip><template #default="{ row }">{{ row.remark || '-' }}</template></el-table-column>
+              <el-table-column label="操作人" min-width="100"><template #default="{ row }">{{ row.operator || '-' }}</template></el-table-column>
+              <el-table-column label="时间" min-width="160"><template #default="{ row }">{{ formatBoundAt(row.createTime) }}</template></el-table-column>
+            </el-table>
+            <div class="manual-pagination"><span>共 {{ ledgerTotal }} 条</span><el-pagination v-model:current-page="ledgerPagination.pageIndex" v-model:page-size="ledgerPagination.pageSize" :total="ledgerTotal" :page-sizes="[10, 20, 50]" layout="sizes, prev, pager, next" background @size-change="loadAlipayLedger" @current-change="loadAlipayLedger" /></div>
+          </template>
+
+          <div class="config-footnote">余额暂未获取时仍可记账，扣前 / 扣后显示「暂未获取」，流水 before/after 为 null；余额已知时按 balance − amount 扣除，不足则拒单。提交成功后会刷新该账号余额与两份列表。</div>
+        </el-tab-pane>
+      </el-tabs>
+    </el-drawer>
+
+    <el-dialog v-model="passwordDialogVisible" title="设置支付密码" width="430px" class="fixed-body-dialog" align-center append-to-body :close-on-click-modal="false">
+      <div class="password-account">支付宝账号：<strong>{{ passwordForm.alipayAccount }}</strong></div>
+      <el-input v-model="passwordForm.password" type="password" show-password placeholder="请输入支付密码明文" maxlength="32" clearable @keyup.enter="submitPassword" />
+      <div class="password-hint">密码由后端加密入库，列表仅回显 ********，不会返回明文；请避免在公共环境输入。</div>
+      <template #footer><el-button @click="passwordDialogVisible = false">取消</el-button><el-button type="primary" :loading="passwordSaving" @click="submitPassword">保存密码</el-button></template>
+    </el-dialog>
+
+    <el-dialog v-model="accountDialogVisible" title="新增支付宝账号" width="430px" class="fixed-body-dialog" align-center append-to-body :close-on-click-modal="false">
+      <div class="dialog-form-row"><span>支付宝账号</span><el-input v-model="accountForm.alipayAccount" placeholder="请输入支付宝账号" maxlength="64" clearable @keyup.enter="submitAccount" /></div>
+      <div class="dialog-form-row"><span>支付密码（可选）</span><el-input v-model="accountForm.password" type="password" show-password placeholder="可留空，创建后单独设密" maxlength="32" clearable @keyup.enter="submitAccount" /></div>
+      <div class="password-hint">创建时可直接一并设密；留空则稍后在列表中点「设置密码」。密码加密入库，列表只回显掩码。</div>
+      <template #footer><el-button @click="accountDialogVisible = false">取消</el-button><el-button type="primary" :loading="accountSaving" @click="submitAccount">保存</el-button></template>
+    </el-dialog>
+
+    <el-dialog v-model="bindDialogVisible" title="绑定 / 解绑支付宝" width="460px" class="fixed-body-dialog" align-center append-to-body :close-on-click-modal="false">
+      <div class="password-account">设备号：<strong class="mono">{{ bindForm.deviceId || '-' }}</strong></div>
+      <div class="password-account">当前绑定：<strong>{{ bindForm.currentAccount || '未绑定' }}</strong></div>
+      <el-select v-model="bindForm.target" class="assign-select" filterable placeholder="选择要绑定的支付宝账号">
+        <el-option v-for="item in alipayAccounts" :key="item.alipayAccount" :label="`${item.alipayAccount}${item.hasPassword ? '' : '（未设密）'}`" :value="item.alipayAccount" />
+        <el-option label="解绑（清除当前绑定）" value="__unbind__" />
+      </el-select>
+      <div class="password-hint">绑定后设备派单将按该账号取支付密码；未设密的账号仍会导致支付失败。若账号不在列表中，请先在「支付宝账号与密码」中新增。设备在线时会同步内存中的付款账号，后绑覆盖。</div>
+      <template #footer><el-button @click="bindDialogVisible = false">取消</el-button><el-button type="primary" :loading="bindSaving" @click="submitBind">保存</el-button></template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Connection, Link, Monitor, Iphone, User, UserFilled, Grid, Refresh, Search, CircleCheck, DataAnalysis, FullScreen, Operation, Aim, Plus, Check, Loading, InfoFilled, CopyDocument, Collection } from '@element-plus/icons-vue'
+import { Connection, Link, Monitor, Iphone, User, UserFilled, Grid, Refresh, Search, CircleCheck, DataAnalysis, FullScreen, Operation, Aim, Plus, Check, Loading, InfoFilled, CopyDocument, Collection, Tools, Key } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
-import { getWorkerList, saveWorkerSchedule, disconnectWorkerApi, androidGroupList, androidGroupSave, androidGroupDelete, androidGroupAssign } from '@/api/api.js'
+import { getWorkerList, saveWorkerSchedule, disconnectWorkerApi, androidGroupList, androidGroupSave, androidGroupDelete, androidGroupAssign, alipayAccountList, alipayAccountSave, setAlipayAccountPassword, androidDeviceList, androidDeviceBindAlipay, getAlipayBalanceThreshold, setAlipayBalanceThreshold, createManualRecharge, getManualRechargeList, getAlipayBalanceLedger } from '@/api/api.js'
 
 const workers = ref([])
 const scheduleConfigs = ref({})
@@ -234,10 +404,69 @@ const assignWorker = ref(null)
 const assignTarget = ref('__ungrouped__')
 const assignNewName = ref('')
 const assignSaving = ref(false)
+const configDrawerVisible = ref(false)
+const configActiveTab = ref('alipay')
+const alipayAccounts = ref([])
+const alipayLoading = ref(false)
+const alipayKeyword = ref('')
+const androidDevices = ref([])
+const deviceLoading = ref(false)
+const deviceKeyword = ref('')
+const deviceGroupFilter = ref('')
+const deviceOnlineFilter = ref('')
+const passwordDialogVisible = ref(false)
+const passwordForm = ref({ alipayAccount: '', password: '' })
+const passwordSaving = ref(false)
+const accountDialogVisible = ref(false)
+const accountForm = ref({ alipayAccount: '', password: '' })
+const accountSaving = ref(false)
+const bindDialogVisible = ref(false)
+const bindForm = ref({ deviceId: '', currentAccount: '', target: '' })
+const bindSaving = ref(false)
+const balanceThreshold = ref(null)
+const balanceEnabled = ref(false)
+const thresholdInput = ref('')
+const thresholdLoading = ref(false)
+const thresholdSaving = ref(false)
+/* 人工充值单 · 支付宝余额扣除流水：按登录 Token 推断租户，不随左侧租户选择变化 */
+const manualForm = ref({ alipayAccount: '', amount: null, deviceId: '', remark: '' })
+const manualSaving = ref(false)
+const manualResult = ref(null)
+const manualSubView = ref('orders')
+const rechargeOrders = ref([])
+const rechargeTotal = ref(0)
+const rechargeLoading = ref(false)
+const rechargePagination = reactive({ pageIndex: 1, pageSize: 20 })
+const rechargeFilters = reactive({ alipayAccount: '', deviceId: '', dateRange: [] })
+const alipayLedgerList = ref([])
+const ledgerTotal = ref(0)
+const ledgerLoading = ref(false)
+const ledgerPagination = reactive({ pageIndex: 1, pageSize: 20 })
+const ledgerFilters = reactive({ alipayAccount: '', changeType: 'manual_deduct', dateRange: [] })
 const currentTime = ref(Date.now())
 const router = useRouter()
 let refreshTimer = null
 let clockTimer = null
+
+const filteredAlipayAccounts = computed(() => {
+  const keyword = alipayKeyword.value.trim().toLowerCase()
+  return keyword ? alipayAccounts.value.filter(item => item.alipayAccount.toLowerCase().includes(keyword)) : alipayAccounts.value
+})
+const filteredAndroidDevices = computed(() => {
+  const keyword = deviceKeyword.value.trim().toLowerCase()
+  let list = androidDevices.value
+  if (keyword) list = list.filter(item => item.deviceId.toLowerCase().includes(keyword) || item.alipayAccount.toLowerCase().includes(keyword))
+  if (deviceGroupFilter.value === '__ungrouped__') list = list.filter(item => !item.group)
+  else if (deviceGroupFilter.value) list = list.filter(item => item.group === deviceGroupFilter.value)
+  if (deviceOnlineFilter.value === 'online') list = list.filter(item => item.online)
+  else if (deviceOnlineFilter.value === 'offline') list = list.filter(item => !item.online)
+  return list
+})
+
+const thresholdText = computed(() => {
+  if (!balanceEnabled.value || balanceThreshold.value === null || balanceThreshold.value === undefined) return '未启用'
+  return String(balanceThreshold.value)
+})
 
 const statistics = computed(() => {
   const data = workers.value
@@ -270,11 +499,13 @@ const filteredTenants = computed(() => {
   return keyword ? tenants.value.filter(item => String(item.tenantId).includes(keyword) || item.name.toLowerCase().includes(keyword)) : tenants.value
 })
 const currentTenantId = computed(() => String(selectedTenant.value || authStore.tenantId || workers.value[0]?.tenantId || ''))
+// 配置类写操作必须明确选中租户：全部租户视图下不做写入，避免误改登录租户/首个连接租户的数据
+const configTenantId = computed(() => selectedTenant.value === null ? '' : String(selectedTenant.value))
 const filteredWorkers = computed(() => {
   let data = workers.value.filter(item => item.platform === activePlatform.value)
   if (selectedTenant.value !== null) data = data.filter(item => item.tenantId === String(selectedTenant.value))
   const keyword = workerKeyword.value.trim().toLowerCase()
-  if (keyword) data = data.filter(item => item.workId.toLowerCase().includes(keyword) || item.tenantId.includes(keyword) || item.orderId.toLowerCase().includes(keyword) || item.payAccount.toLowerCase().includes(keyword))
+  if (keyword) data = data.filter(item => item.workId.toLowerCase().includes(keyword) || item.deviceId.toLowerCase().includes(keyword) || item.tenantId.includes(keyword) || item.orderId.toLowerCase().includes(keyword) || item.payAccount.toLowerCase().includes(keyword))
   if (statusFilter.value === 'idle') data = data.filter(item => !item.isRunning)
   if (statusFilter.value === 'running') data = data.filter(item => item.isRunning)
   if (groupFilter.value === '__ungrouped__') data = data.filter(item => !item.group)
@@ -449,8 +680,25 @@ async function changePlatform(platform) {
 watch(selectedTenant, value => {
   if (value === null) localStorage.removeItem(STORAGE_TENANT)
   else localStorage.setItem(STORAGE_TENANT, String(value))
+  // 切换租户时清空配置缓存；抽屉打开则立即按新租户重新加载，避免残留/误改其他租户数据
+  alipayAccounts.value = []
+  androidDevices.value = []
+  // 记账表单的账号/设备来自上面两份列表，租户变了必须清掉，避免提交到不属于新租户的账号
+  manualForm.value.alipayAccount = ''
+  manualForm.value.deviceId = ''
+  manualResult.value = null
+  if (configDrawerVisible.value) {
+    loadAlipayAccounts()
+    loadAndroidDevices()
+  }
 })
 watch(activePlatform, value => localStorage.setItem(STORAGE_PLATFORM, value))
+// 切到「人工充值 · 余额流水」时才加载列表，避免每次打开抽屉都发多余请求
+watch(configActiveTab, tab => {
+  if (tab !== 'manual') return
+  if (manualSubView.value === 'orders') loadRechargeOrders()
+  else loadAlipayLedger()
+})
 
 async function disconnectWorker(worker) {
   try {
@@ -471,19 +719,35 @@ async function loadGroupList() {
   if (!currentTenantId.value) return
   try {
     const res = await androidGroupList({ tenantId: currentTenantId.value })
+    const groupMap = new Map()
     const rawGroups = Array.isArray(res?.groups) ? res.groups : []
-    const groupMap = new Map(rawGroups.map(group => {
-      if (typeof group === 'string') return [group, { name: group, memberCount: 0, onlineCount: 0 }]
-      return [group.name, { name: group.name, memberCount: group.memberCount ?? 0, onlineCount: group.onlineCount ?? 0 }]
-    }))
+    for (const group of rawGroups) {
+      if (typeof group === 'string') groupMap.set(group, { name: group, memberCount: 0, onlineCount: 0 })
+      else if (group?.name) groupMap.set(group.name, { name: group.name, memberCount: Number(group.memberCount ?? 0), onlineCount: Number(group.onlineCount ?? 0) })
+    }
+    // 接口文档契约：members[] = { deviceId, group }，据此统计组成员
+    const rawMembers = Array.isArray(res?.members) ? res.members : []
+    const memberCounts = new Map()
+    for (const member of rawMembers) {
+      const name = typeof member === 'string' ? member : String(member?.group || '')
+      if (!name) continue
+      memberCounts.set(name, (memberCounts.get(name) || 0) + 1)
+      if (!groupMap.has(name)) groupMap.set(name, { name, memberCount: 0, onlineCount: 0 })
+    }
+    if (!rawGroups.length) {
+      for (const [name, count] of memberCounts) groupMap.get(name).memberCount = count
+    }
     for (const name of fallbackGroupNames.value) {
       if (name && !groupMap.has(name)) groupMap.set(name, { name, memberCount: 0, onlineCount: 0 })
     }
+    // 在线数统一以实时 Worker 列表为准（worker_list 只返回在线连接）
+    const onlineCounts = new Map()
     for (const worker of workers.value) {
-      if (worker.group && !groupMap.has(worker.group)) {
-        groupMap.set(worker.group, { name: worker.group, memberCount: 1, onlineCount: worker.isRunning ? 0 : 1 })
-      }
+      if (!worker.group) continue
+      onlineCounts.set(worker.group, (onlineCounts.get(worker.group) || 0) + 1)
+      if (!groupMap.has(worker.group)) groupMap.set(worker.group, { name: worker.group, memberCount: 1, onlineCount: 0 })
     }
+    for (const [name, count] of onlineCounts) groupMap.get(name).onlineCount = count
     workerGroups.value = [...groupMap.values()]
   } catch (error) {
     console.warn('获取安卓分组失败:', error)
@@ -491,17 +755,19 @@ async function loadGroupList() {
 }
 
 function openGroupDialog() {
+  if (selectedTenant.value === null) return ElMessage.warning('请先从左侧选择具体租户')
   newGroupName.value = ''
   groupDialogVisible.value = true
 }
 
 async function createGroup() {
+  if (selectedTenant.value === null) return ElMessage.warning('请先从左侧选择具体租户')
   const name = newGroupName.value.trim()
   if (!name) return ElMessage.warning('请输入分组名称')
   if (workerGroups.value.some(group => group.name === name)) return ElMessage.warning('分组已存在')
   groupSaving.value = true
   try {
-    await androidGroupSave({ tenantId: currentTenantId.value, group: name })
+    await androidGroupSave({ tenantId: configTenantId.value, group: name })
     newGroupName.value = ''
     await loadGroupList()
     ElMessage.success('分组创建成功')
@@ -512,6 +778,7 @@ async function createGroup() {
 }
 
 async function openRenameGroup(group) {
+  if (selectedTenant.value === null) return ElMessage.warning('请先从左侧选择具体租户')
   try {
     const { value } = await ElMessageBox.prompt('请输入新分组名称', '重命名分组', {
       inputValue: group.name,
@@ -519,7 +786,7 @@ async function openRenameGroup(group) {
     })
     const newName = value.trim()
     if (workerGroups.value.some(item => item.name === newName)) return ElMessage.warning('目标分组已存在')
-    await androidGroupSave({ tenantId: currentTenantId.value, group: group.name, newName })
+    await androidGroupSave({ tenantId: configTenantId.value, group: group.name, newName })
     await refreshData()
     ElMessage.success('分组重命名成功')
   } catch (error) {
@@ -531,6 +798,7 @@ async function openRenameGroup(group) {
 }
 
 async function deleteGroup(group) {
+  if (selectedTenant.value === null) return ElMessage.warning('请先从左侧选择具体租户')
   try {
     await ElMessageBox.confirm(`确定删除分组「${group.name}」吗？删除后组内设备将变为未分组。`, '删除分组', {
       confirmButtonText: '确定删除',
@@ -539,7 +807,7 @@ async function deleteGroup(group) {
     })
   } catch { return }
   try {
-    await androidGroupDelete({ tenantId: currentTenantId.value, group: group.name })
+    await androidGroupDelete({ tenantId: configTenantId.value, group: group.name })
     scheduleForm.value.groups = scheduleForm.value.groups.filter(item => item !== group.name)
     await refreshData()
     ElMessage.success('分组已删除')
@@ -550,7 +818,7 @@ async function deleteGroup(group) {
 }
 
 function openAssignDialog(worker) {
-  if (!worker.payAccount) return ElMessage.warning('该设备缺少付款账号，无法设置分组')
+  if (!worker.deviceId) return ElMessage.warning('该 Worker 未上报设备号，无法设置分组')
   assignWorker.value = worker
   assignTarget.value = worker.group || '__ungrouped__'
   assignNewName.value = ''
@@ -563,7 +831,7 @@ function onAssignTargetChange() {
 
 async function confirmAssign() {
   const worker = assignWorker.value
-  if (!worker?.payAccount) return ElMessage.warning('该设备缺少付款账号，无法设置分组')
+  if (!worker?.deviceId) return ElMessage.warning('该 Worker 未上报设备号，无法设置分组')
   let groupName = ''
   if (assignTarget.value === '__ungrouped__') {
     groupName = ''
@@ -580,14 +848,398 @@ async function confirmAssign() {
     if (assignTarget.value === '__new__') {
       await androidGroupSave({ tenantId, group: groupName })
     }
-    await androidGroupAssign({ tenantId, payAccount: worker.payAccount, group: groupName })
+    // 分组只认 deviceId，不再传 payAccount；换绑支付宝不影响已有分组
+    await androidGroupAssign({ tenantId, deviceId: worker.deviceId, group: groupName })
     assignVisible.value = false
     await refreshData()
+    if (configDrawerVisible.value) await loadAndroidDevices()
     ElMessage.success('设备分组已更新')
   } catch (error) {
     console.error('分配设备分组失败:', error)
     ElMessage.error(error?.message || '分配设备分组失败')
   } finally { assignSaving.value = false }
+}
+
+function openConfigDrawer() {
+  configDrawerVisible.value = true
+  loadBalanceThreshold()
+  loadAlipayAccounts()
+  loadAndroidDevices()
+}
+
+async function loadAlipayAccounts() {
+  if (!configTenantId.value) { alipayAccounts.value = []; return }
+  alipayLoading.value = true
+  try {
+    const res = await alipayAccountList({ tenantId: configTenantId.value })
+    const list = Array.isArray(res?.list) ? res.list : (Array.isArray(res) ? res : [])
+    // 列表 data.threshold 与 threshold/get 一致；belowThreshold 直接采用后端判定，前端不重复计算
+    alipayAccounts.value = list.map(item => ({
+      alipayAccount: String(item.alipayAccount || ''),
+      hasPassword: Boolean(item.hasPassword),
+      passwordMask: String(item.passwordMask || (item.hasPassword ? '********' : '')),
+      balance: item.balance === null || item.balance === undefined ? null : Number(item.balance),
+      balanceText: String(item.balanceText || (item.balance == null ? '暂未获取' : String(item.balance))),
+      balanceUpdatedAt: item.balanceUpdatedAt || '',
+      belowThreshold: Boolean(item.belowThreshold),
+    }))
+  } catch (error) {
+    console.error('获取支付宝账号列表失败:', error)
+    ElMessage.error(error?.message || '获取支付宝账号列表失败')
+  } finally { alipayLoading.value = false }
+}
+
+async function loadAndroidDevices() {
+  if (!configTenantId.value) { androidDevices.value = []; return }
+  deviceLoading.value = true
+  try {
+    const res = await androidDeviceList({ tenantId: configTenantId.value })
+    const list = Array.isArray(res?.list) ? res.list : (Array.isArray(res) ? res : [])
+    androidDevices.value = list.map(item => ({
+      deviceId: String(item.deviceId || ''),
+      alipayAccount: String(item.alipayAccount || ''),
+      group: String(item.group || ''),
+      online: Boolean(item.online),
+      boundAt: item.boundAt || '',
+      balance: item.balance === null || item.balance === undefined ? null : Number(item.balance),
+      balanceText: String(item.balanceText || (item.balance == null ? '暂未获取' : String(item.balance))),
+      balanceUpdatedAt: item.balanceUpdatedAt || '',
+      belowThreshold: Boolean(item.belowThreshold),
+    }))
+  } catch (error) {
+    console.error('获取安卓设备列表失败:', error)
+    ElMessage.error(error?.message || '获取安卓设备列表失败')
+  } finally { deviceLoading.value = false }
+}
+
+function formatBoundAt(value) {
+  if (!value) return '-'
+  const num = Number(value)
+  if (Number.isFinite(num) && num > 0) {
+    const ms = num < 1e12 ? num * 1000 : num
+    return new Date(ms).toLocaleString('zh-CN', { hour12: false })
+  }
+  return String(value)
+}
+
+function openPasswordDialog(row) {
+  passwordForm.value = { alipayAccount: row.alipayAccount, password: '' }
+  passwordDialogVisible.value = true
+}
+
+async function submitPassword() {
+  const password = passwordForm.value.password
+  if (!password) return ElMessage.warning('请输入支付密码')
+  const ok = await applyAlipayPassword(passwordForm.value.alipayAccount, password, '支付密码设置成功')
+  if (ok) passwordDialogVisible.value = false
+}
+
+async function applyAlipayPassword(account, password, successText) {
+  if (!configTenantId.value) { ElMessage.warning('请先在左侧选择具体租户'); return false }
+  if (!account || passwordSaving.value) return false
+  passwordSaving.value = true
+  try {
+    await setAlipayAccountPassword({ tenantId: configTenantId.value, alipayAccount: account, password })
+    passwordForm.value.password = ''
+    ElMessage.success(successText)
+    await loadAlipayAccounts()
+    return true
+  } catch (error) {
+    console.error('设置支付宝密码失败:', error)
+    ElMessage.error(error?.message || '设置支付宝密码失败')
+    return false
+  } finally { passwordSaving.value = false }
+}
+
+async function clearAlipayPassword(row) {
+  if (!row.hasPassword) return
+  try {
+    await ElMessageBox.confirm(
+      `确定清空支付宝账号「${row.alipayAccount}」的支付密码吗？清空后该账号将无法用于自动支付。`,
+      '清空支付密码',
+      { confirmButtonText: '确认清空', cancelButtonText: '取消', type: 'warning' }
+    )
+  } catch { return }
+  await applyAlipayPassword(row.alipayAccount, '', '支付密码已清空')
+}
+
+function openDeviceAssignDialog(row) {
+  if (!configTenantId.value) return ElMessage.warning('请先在左侧选择具体租户')
+  openAssignDialog({
+    deviceId: row.deviceId,
+    payAccount: row.alipayAccount,
+    tenantId: configTenantId.value,
+    group: row.group,
+    platform: 'android',
+  })
+}
+
+function openAccountDialog() {
+  if (!configTenantId.value) return ElMessage.warning('请先在左侧选择具体租户')
+  accountForm.value = { alipayAccount: '', password: '' }
+  accountDialogVisible.value = true
+}
+
+async function submitAccount() {
+  if (!configTenantId.value) return ElMessage.warning('请先在左侧选择具体租户')
+  const alipayAccount = accountForm.value.alipayAccount.trim()
+  if (!alipayAccount) return ElMessage.warning('请输入支付宝账号')
+  if (alipayAccounts.value.some(item => item.alipayAccount === alipayAccount)) return ElMessage.warning('该支付宝账号已存在，如需改密请用「设置密码」')
+  if (accountSaving.value) return
+  accountSaving.value = true
+  try {
+    const payload = { tenantId: configTenantId.value, alipayAccount }
+    // password 可选：创建时一并设密；留空则不传，避免被后端当成清空
+    if (accountForm.value.password) payload.password = accountForm.value.password
+    await alipayAccountSave(payload)
+    accountDialogVisible.value = false
+    accountForm.value = { alipayAccount: '', password: '' }
+    ElMessage.success('支付宝账号已新增')
+    await loadAlipayAccounts()
+  } catch (error) {
+    console.error('新增支付宝账号失败:', error)
+    ElMessage.error(error?.message || '新增支付宝账号失败')
+  } finally { accountSaving.value = false }
+}
+
+function openBindDialog(row) {
+  if (!configTenantId.value) return ElMessage.warning('请先在左侧选择具体租户')
+  if (!row.deviceId) return ElMessage.warning('该设备未上报设备号')
+  bindForm.value = { deviceId: row.deviceId, currentAccount: row.alipayAccount || '', target: row.alipayAccount || '' }
+  bindDialogVisible.value = true
+}
+
+async function submitBind() {
+  if (!configTenantId.value) return ElMessage.warning('请先在左侧选择具体租户')
+  const target = bindForm.value.target
+  if (!target) return ElMessage.warning('请选择要绑定的支付宝账号，或选择解绑')
+  if (bindSaving.value) return
+  const alipayAccount = target === '__unbind__' ? '' : target
+  if (alipayAccount === bindForm.value.currentAccount) return ElMessage.warning('绑定关系未变化')
+  const isUnbind = !alipayAccount
+  if (isUnbind) {
+    try {
+      await ElMessageBox.confirm(
+        '确定解除该设备当前绑定的支付宝吗？解绑后该设备派单将取不到支付密码，支付会失败。',
+        '解绑支付宝',
+        { confirmButtonText: '确认解绑', cancelButtonText: '取消', type: 'warning' }
+      )
+    } catch { return }
+  }
+  bindSaving.value = true
+  try {
+    await androidDeviceBindAlipay({ tenantId: configTenantId.value, deviceId: bindForm.value.deviceId, alipayAccount })
+    bindDialogVisible.value = false
+    ElMessage.success(isUnbind ? '已解绑支付宝' : '支付宝绑定成功')
+    await loadAndroidDevices()
+    // 设备在线时后端会同步内存中的付款账号，刷新 Worker 列表让 payAccount 立即更新
+    await refreshData()
+  } catch (error) {
+    console.error('绑定设备支付宝失败:', error)
+    ElMessage.error(error?.message || '绑定设备支付宝失败')
+  } finally { bindSaving.value = false }
+}
+
+/* ===== 余额预警阈值：get / set 不接受 tenantId，按登录 Token 推断租户 ===== */
+async function loadBalanceThreshold() {
+  thresholdLoading.value = true
+  try {
+    const res = await getAlipayBalanceThreshold()
+    const raw = res?.threshold
+    const value = raw === null || raw === undefined || raw === '' ? null : Number(raw)
+    balanceThreshold.value = Number.isFinite(value) ? value : null
+    balanceEnabled.value = res?.enabled !== undefined
+      ? Boolean(res.enabled)
+      : (balanceThreshold.value !== null && balanceThreshold.value > 0)
+    thresholdInput.value = balanceThreshold.value === null ? '' : String(balanceThreshold.value)
+  } catch (error) {
+    // 阈值读取失败不阻塞抽屉其余功能
+    console.warn('获取余额预警阈值失败:', error)
+  } finally { thresholdLoading.value = false }
+}
+
+async function saveBalanceThreshold() {
+  if (thresholdSaving.value) return
+  let payload
+  if (!balanceEnabled.value) {
+    payload = { threshold: null }
+  } else {
+    const value = Number(thresholdInput.value)
+    if (thresholdInput.value === '' || !Number.isFinite(value) || value < 0) return ElMessage.warning('请输入有效的阈值金额（≥ 0）')
+    payload = { threshold: value }
+  }
+  thresholdSaving.value = true
+  try {
+    await setAlipayBalanceThreshold(payload)
+    balanceThreshold.value = payload.threshold
+    thresholdInput.value = payload.threshold === null ? '' : String(payload.threshold)
+    ElMessage.success(payload.threshold === null ? '余额预警已关闭' : '余额预警阈值已保存')
+    // 阈值变化会影响列表 belowThreshold，刷新两份列表
+    await Promise.all([loadAlipayAccounts(), loadAndroidDevices()])
+  } catch (error) {
+    console.error('设置余额预警阈值失败:', error)
+    ElMessage.error(error?.message || '设置余额预警阈值失败')
+  } finally { thresholdSaving.value = false }
+}
+
+/* ===== 人工充值单 · 支付宝余额扣除流水 ===== */
+function formatMoney(value) {
+  const num = Number(value)
+  return Number.isFinite(num) ? num.toFixed(2) : '-'
+}
+
+/** before/afterBalance 为 null 表示余额暂未获取，不能显示成 ¥0.00 */
+function formatBalance(value) {
+  if (value === null || value === undefined || value === '') return '暂未获取'
+  const num = Number(value)
+  return Number.isFinite(num) ? `¥${num.toFixed(2)}` : String(value)
+}
+
+function buildTimeParams(range) {
+  if (Array.isArray(range) && range.length === 2 && range[0] && range[1]) {
+    return { startTime: `${range[0]} 00:00:00`, endTime: `${range[1]} 23:59:59` }
+  }
+  return { startTime: '', endTime: '' }
+}
+
+/** 兼容 data.list[] / 顶层数组两种响应；total 缺失时退回本页条数 */
+function extractPagedList(res) {
+  const list = Array.isArray(res?.list) ? res.list : (Array.isArray(res) ? res : [])
+  const rawTotal = Number(res?.total ?? res?.count ?? list.length)
+  return { list, total: Number.isFinite(rawTotal) ? rawTotal : list.length }
+}
+
+function resetManualForm() {
+  manualForm.value = { alipayAccount: '', amount: null, deviceId: '', remark: '' }
+  manualResult.value = null
+}
+
+async function submitManualRecharge() {
+  if (!configTenantId.value) return ElMessage.warning('请先在左侧选择具体租户，以加载支付宝账号')
+  const alipayAccount = manualForm.value.alipayAccount
+  if (!alipayAccount) return ElMessage.warning('请选择支付宝账号')
+  const amount = Number(manualForm.value.amount)
+  if (!Number.isFinite(amount) || amount <= 0) return ElMessage.warning('请输入大于 0 的实付金额')
+  const remark = manualForm.value.remark.trim()
+  if (!remark) return ElMessage.warning('备注必填')
+  if (manualSaving.value) return
+  manualSaving.value = true
+  try {
+    const payload = { alipayAccount, amount, remark }
+    const deviceId = String(manualForm.value.deviceId || '').trim()
+    if (deviceId) payload.deviceId = deviceId
+    const res = await createManualRecharge(payload)
+    manualResult.value = {
+      rechargeNo: String(res?.rechargeNo || ''),
+      beforeBalance: res?.beforeBalance ?? null,
+      afterBalance: res?.afterBalance ?? null,
+    }
+    manualForm.value.amount = null
+    manualForm.value.remark = ''
+    ElMessage.success('人工充值单记账成功')
+    // 文档要求：提交成功后刷新该账号 balance / balanceText，并同步两份列表
+    await Promise.all([loadAlipayAccounts(), loadRechargeOrders(), loadAlipayLedger()])
+  } catch (error) {
+    console.error('新建人工充值单失败:', error)
+    ElMessage.error(error?.message || '新建人工充值单失败')
+  } finally { manualSaving.value = false }
+}
+
+async function loadRechargeOrders() {
+  rechargeLoading.value = true
+  try {
+    const res = await getManualRechargeList({
+      alipayAccount: rechargeFilters.alipayAccount.trim(),
+      deviceId: rechargeFilters.deviceId.trim(),
+      ...buildTimeParams(rechargeFilters.dateRange),
+      pageIndex: rechargePagination.pageIndex,
+      pageSize: rechargePagination.pageSize,
+    })
+    const { list, total } = extractPagedList(res)
+    rechargeOrders.value = list.map(item => ({
+      rechargeNo: String(item.rechargeNo || ''),
+      alipayAccount: String(item.alipayAccount || ''),
+      deviceId: String(item.deviceId || ''),
+      amount: item.amount ?? 0,
+      beforeBalance: item.beforeBalance ?? null,
+      afterBalance: item.afterBalance ?? null,
+      remark: String(item.remark || ''),
+      operator: String(item.operator || ''),
+      createTime: item.createTime || '',
+    }))
+    rechargeTotal.value = total
+  } catch (error) {
+    console.error('读取人工充值单列表失败:', error)
+    ElMessage.error(error?.message || '读取人工充值单列表失败')
+  } finally { rechargeLoading.value = false }
+}
+
+async function loadAlipayLedger() {
+  ledgerLoading.value = true
+  try {
+    const res = await getAlipayBalanceLedger({
+      alipayAccount: ledgerFilters.alipayAccount.trim(),
+      changeType: ledgerFilters.changeType,
+      ...buildTimeParams(ledgerFilters.dateRange),
+      pageIndex: ledgerPagination.pageIndex,
+      pageSize: ledgerPagination.pageSize,
+    })
+    const { list, total } = extractPagedList(res)
+    alipayLedgerList.value = list.map(item => ({
+      refNo: String(item.refNo || ''),
+      alipayAccount: String(item.alipayAccount || ''),
+      amount: Number(item.amount ?? 0),
+      beforeBalance: item.beforeBalance ?? null,
+      afterBalance: item.afterBalance ?? null,
+      changeType: String(item.changeType || ''),
+      remark: String(item.remark || ''),
+      operator: String(item.operator || ''),
+      createTime: item.createTime || '',
+    }))
+    ledgerTotal.value = total
+  } catch (error) {
+    console.error('读取支付宝余额流水失败:', error)
+    ElMessage.error(error?.message || '读取支付宝余额流水失败')
+  } finally { ledgerLoading.value = false }
+}
+
+function searchRecharge() {
+  rechargePagination.pageIndex = 1
+  loadRechargeOrders()
+}
+
+function resetRechargeFilters() {
+  rechargeFilters.alipayAccount = ''
+  rechargeFilters.deviceId = ''
+  rechargeFilters.dateRange = []
+  searchRecharge()
+}
+
+function searchLedger() {
+  ledgerPagination.pageIndex = 1
+  loadAlipayLedger()
+}
+
+function resetLedgerFilters() {
+  ledgerFilters.alipayAccount = ''
+  ledgerFilters.changeType = 'manual_deduct'
+  ledgerFilters.dateRange = []
+  searchLedger()
+}
+
+function switchManualSubView(view) {
+  if (manualSubView.value === view) return
+  manualSubView.value = view
+  if (view === 'orders') loadRechargeOrders()
+  else loadAlipayLedger()
+}
+
+/** 账号列表「流水」：跳到人工充值 Tab 并预填账号，加载由 configActiveTab 的 watch 触发 */
+function openAccountLedger(row) {
+  ledgerFilters.alipayAccount = row.alipayAccount
+  ledgerPagination.pageIndex = 1
+  manualSubView.value = 'ledger'
+  configActiveTab.value = 'manual'
 }
 
 async function refreshData(showMessage = false) {
@@ -599,6 +1251,7 @@ async function refreshData(showMessage = false) {
     workers.value = list.map(item => ({
       id: String(item.workerKey || ''), workId: String(item.workerKey || ''), workerKey: String(item.workerKey || ''),
       tenantId: String(item.tenantId ?? ''), platform: String(item.platform || '').toLowerCase(),
+      deviceId: String(item.deviceId || item.device || ''),
       payAccount: String(item.payAccount || ''), group: String(item.group || ''), isRunning: Boolean(item.isRunning), orderId: String(item.orderId || ''),
       connectedAt: Number(item.connectedAt || 0) * 1000, lastHeartbeat: Number(item.lastHeartbeat || 0) * 1000
     }))
@@ -671,7 +1324,7 @@ onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer); if (clockTime
 .worker-tabs-header{display:flex;align-items:center;justify-content:space-between;min-height:64px;padding:0 20px;border-bottom: 1px solid var(--app-border)}.platform-tabs{display:flex;align-items:center;gap:10px;height:64px}.platform-tab{position:relative;display:flex;align-items:center;gap:9px;height:49px;padding:0 20px;border-radius:10px 10px 0 0;color:var(--app-text-regular);font-size:13px;font-weight:500;white-space:nowrap;cursor:pointer}.platform-tab .el-icon{font-size:18px}.platform-tab.active{background:var(--app-accent-soft);color:var(--app-accent-strong)}.platform-tab.active::after{position:absolute;right:0;bottom:0;left:0;height:3px;border-radius:3px 3px 0 0;background:var(--app-accent);content:''}.platform-count{font-size:11px}.worker-header-actions{display:flex;align-items:center;gap:15px}.auto-refresh{display:flex;align-items:center;gap:9px;color: var(--app-text-secondary);font-size:11px;white-space:nowrap}.rotating .el-icon{animation:spin .7s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
 .schedule-section{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom: 1px solid var(--app-border)}.schedule-title{display:flex;flex-direction:column;justify-content:center;gap:5px;width:86px;flex-shrink:0}.schedule-title strong{font-size:12px;color: var(--app-text-primary)}.schedule-title span{color: var(--app-text-secondary);font-size:10px;white-space:nowrap}.schedule-modes{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;flex:1.35;min-width:0}.schedule-mode{display:flex;align-items:center;gap:8px;min-height:62px;padding:9px 10px;border: 1px solid var(--app-border);border-radius:10px;background: var(--app-bg-subtle);cursor:pointer;transition:all .2s}.schedule-mode.active{border-color:var(--app-accent-border);background:var(--app-accent-soft);box-shadow:0 0 0 1px var(--app-accent-subtle)}.schedule-mode.disabled{opacity:.55;cursor:not-allowed}.radio-circle{display:block;width:16px;height:16px;border:1.5px solid #b4c1d7;border-radius:50%;background: var(--app-bg-elevated);flex-shrink:0}.radio-circle.checked{border:5px solid var(--app-accent)}.mode-info{display:flex;flex-direction:column;gap:4px;min-width:0}.mode-info strong{color: var(--app-text-primary);font-size:11px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.schedule-mode.active .mode-info strong{color:var(--app-accent-strong)}.mode-info span{color: var(--app-text-secondary);font-size:10px;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.mode-icon{margin-left:auto;color:#b6c4da;flex-shrink:0;font-size:16px}.schedule-selected{flex:1;min-width:0;min-height:62px;display:flex;align-items:center;gap:10px;padding:9px 11px;border: 1px solid var(--app-border);border-radius:10px;background: var(--app-bg-subtle)}.selected-label{display:flex;align-items:center;gap:5px;flex-shrink:0;color: var(--app-text-primary);font-size:11px;font-weight:600;white-space:nowrap}.selected-label span{color: var(--app-text-secondary);font-weight:400}.selected-workers{flex:1;min-width:0;display:flex;align-items:center;flex-wrap:wrap;gap:6px;min-height:32px}.selected-workers :deep(.el-tag){padding: 6px;max-width:100%;height:auto;white-space:normal;overflow-wrap:anywhere}.selected-placeholder{color: var(--app-text-muted);font-size:11px}.schedule-selected>.el-button{flex-shrink:0}
 .worker-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:15px 20px}.toolbar-left{display:flex;align-items:center;gap:10px}.worker-search{width:250px}.status-filter{width:125px}.toolbar-right{display:flex;align-items:center}.online-label{display:flex;align-items:center;gap:7px;color: var(--app-text-muted);font-size:11px;white-space:nowrap}.worker-table{padding:0 20px}.worker-table :deep(.el-table){--el-table-border-color: var(--app-border);--el-table-row-hover-bg-color:var(--app-accent-soft);color: var(--app-text-primary);font-size:12px}.worker-table :deep(.el-table td.el-table__cell){height:51px}.platform-badge{display:inline-flex;align-items:center;gap:5px;padding:4px 8px;border-radius:7px;font-size:11px}.platform-badge.pc{color:var(--app-accent-strong);background:var(--app-accent-soft)}.platform-badge.android{color:#169c5c;background:#e7f8ed}.pay-account{font-size:11px;color:var(--app-text-secondary)}.connection-status{display:inline-flex;align-items:center;gap:7px;color:#10a85e;font-size:11px}.running-badge{display:inline-flex;align-items:center;justify-content:center;gap:5px;padding:5px 10px;border-radius:7px;font-size:11px;white-space:nowrap}.running-badge.busy{color:var(--app-accent-strong);background:var(--app-accent-soft)}.running-badge.idle{color: var(--app-text-muted);background: var(--app-bg-subtle)}.order-link{color:var(--app-accent-strong);cursor:pointer;font-size:11px}.order-link:hover{text-decoration:underline}.empty-value{color:var(--app-text-placeholder)}.permission-badge{display:inline-flex;align-items:center;padding:5px 11px;border-radius:7px;font-size:11px}.permission-badge.allowed{color:#12a65f;background:#e5f8ed}.permission-badge.blocked{color:#7b89a2;background:#eef1f6}.table-actions{display:flex;align-items:center;justify-content:center;gap:5px}.table-actions .el-button{margin-left:0}.worker-id-cell{display:flex;align-items:center;gap:6px}.copy-icon{font-size:14px;color:var(--app-text-muted);cursor:pointer;transition:color .18s}.copy-icon:hover{color:var(--app-accent)}.pagination-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:17px 20px 18px}.pagination-row>span{color: var(--app-text-secondary);font-size:11px}
-.group-filter{width:150px}.group-badge{display:inline-flex;align-items:center;padding:4px 9px;border-radius:7px;font-size:11px;color:var(--app-accent-strong);background:var(--app-accent-soft)}.group-badge.ungrouped{color:#7b89a2;background:#eef1f6}.group-create-row{display:flex;gap:10px;margin-bottom:16px}.group-create-row .el-input{flex:1}.group-list{max-height:max(160px,calc(100dvh - 250px));overflow-y:auto}.group-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 0;border-bottom:1px solid var(--app-border)}.group-row-main{display:flex;flex-direction:column;gap:5px;min-width:0}.group-row-main strong{font-size:13px;color:var(--app-text-primary)}.group-row-main span{font-size:11px;color:var(--app-text-muted)}.group-row-actions{display:flex;gap:8px;flex-shrink:0}.assign-info{margin-bottom:12px;font-size:12px;color:var(--app-text-secondary)}.assign-select{width:100%;margin-bottom:12px}.schedule-group-select{width:100%;max-width:260px}
+.group-filter{width:150px}.group-badge{display:inline-flex;align-items:center;padding:4px 9px;border-radius:7px;font-size:11px;color:var(--app-accent-strong);background:var(--app-accent-soft)}.group-badge.ungrouped{color:#7b89a2;background:#eef1f6}.group-create-row{display:flex;gap:10px;margin-bottom:16px}.group-create-row .el-input{flex:1}.group-list{max-height:max(160px,calc(100dvh - 250px));overflow-y:auto}.group-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 0;border-bottom:1px solid var(--app-border)}.group-row-main{display:flex;flex-direction:column;gap:5px;min-width:0}.group-row-main strong{font-size:13px;color:var(--app-text-primary)}.group-row-main span{font-size:11px;color:var(--app-text-muted)}.group-row-actions{display:flex;gap:8px;flex-shrink:0}.assign-info{display:flex;flex-direction:column;gap:2px;margin-bottom:8px;padding:10px 12px;border:1px solid var(--app-border);border-radius:9px;background:var(--app-bg-subtle);font-size:12px;color:var(--app-text-secondary)}.assign-info>div{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:4px 0}.assign-info span{flex-shrink:0}.assign-info strong{color:var(--app-text-primary);font-weight:500;text-align:right;overflow-wrap:anywhere}.assign-hint{margin-bottom:12px;font-size:11px;color:var(--app-text-muted)}.assign-select{width:100%;margin-bottom:12px}.schedule-group-select{width:100%;max-width:260px}
 .selector-description{display:flex;align-items:flex-start;gap:8px;padding:13px;margin-bottom:18px;border-radius:9px;background:var(--app-accent-soft);color:var(--app-accent-strong);font-size:12px;line-height:1.7}.selector-description .el-icon{margin-top:3px;flex-shrink:0}.selector-header{display:flex;align-items:center;justify-content:space-between;padding:12px;border-bottom: 1px solid var(--app-border);background: var(--app-bg-subtle);color: var(--app-text-secondary);font-size:12px}.selector-list{max-height:max(160px,calc(100dvh - 310px));overflow-y:auto}.selector-item{display:flex;align-items:center;gap:12px;padding:14px 12px;border-bottom: 1px solid var(--app-border);cursor:pointer}.selector-item:hover{background: var(--app-bg-subtle)}.selector-worker-info{display:flex;flex:1;flex-direction:column;gap:5px;min-width:0}.selector-worker-info strong{font-size:12px;color: var(--app-text-primary);overflow-wrap:anywhere}.selector-worker-info span{color: var(--app-text-secondary);font-size:11px}
 .worker-detail-dialog .el-dialog__body{padding:20px 22px 18px}
 .worker-detail-head{display:flex;align-items:center;gap:14px;padding:16px;margin-bottom:18px;background:var(--app-bg-subtle);border:1px solid var(--app-border);border-radius:16px}
@@ -828,5 +1481,92 @@ html.dark .permission-badge.blocked {
   color: var(--app-text-secondary);
   background: var(--app-bg-hover);
   border: 1px solid var(--app-border);
+}
+
+/* 支付宝与设备管理抽屉：抽屉内容 teleport 到 body，样式放全局并用类前缀限定 */
+.config-drawer .el-drawer__body { padding-top: 12px; }
+/* 按组派单下拉：选中 tag 仍显示组名，下拉项额外展示该组在线设备数（popper 同样 teleport 到 body） */
+.group-option { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.group-option-online { color: var(--app-text-muted); font-size: 11px; }
+.config-tenant { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; padding: 10px 12px; border: 1px solid var(--app-border); border-radius: 9px; background: var(--app-bg-subtle); color: var(--app-text-secondary); font-size: 12px; }
+.config-tenant strong { color: var(--app-text-primary); font-weight: 600; }
+.config-tenant-hint { color: #b7791f; }
+.config-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 12px; }
+.config-toolbar .el-input { width: 230px; }
+.config-toolbar .el-select { width: 140px; }
+.config-strong { color: var(--app-text-primary); font-size: 12px; font-weight: 500; }
+.config-mask { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: 2px; color: var(--app-text-secondary); }
+.config-actions { display: flex; justify-content: center; gap: 6px; }
+.config-actions .el-button { margin-left: 0; }
+.config-footnote { margin-top: 10px; color: var(--app-text-muted); font-size: 11px; line-height: 1.6; }
+/* 余额预警阈值面板 */
+.threshold-panel { margin-bottom: 14px; padding: 12px 14px; border: 1px solid var(--app-border); border-radius: 9px; background: var(--app-bg-subtle); }
+.threshold-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px; }
+.threshold-head strong { font-size: 13px; color: var(--app-text-primary); }
+.threshold-head span { font-size: 11px; color: var(--app-text-muted); }
+.threshold-body { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.threshold-input { width: 150px; }
+.threshold-current { font-size: 11px; color: var(--app-text-secondary); }
+.threshold-hint { margin-top: 8px; font-size: 11px; line-height: 1.6; color: var(--app-text-muted); }
+/* 余额列：暂未获取灰色、低于阈值红色 */
+.balance-cell { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; font-size: 12px; color: var(--app-text-primary); }
+.balance-cell .balance-low { color: var(--el-color-danger); font-weight: 600; }
+.balance-cell .balance-unknown { color: var(--app-text-muted); }
+.balance-time { margin-top: 2px; font-size: 10px; color: var(--app-text-muted); }
+.device-id-cell { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.device-id { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; color: var(--app-text-primary); }
+.device-status { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; }
+.device-status.online { color: #10a85e; }
+.device-status.offline { color: var(--app-text-muted); }
+.status-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.password-account { margin-bottom: 12px; font-size: 12px; color: var(--app-text-secondary); }
+.password-account strong { color: var(--app-text-primary); font-weight: 600; }
+.password-hint { margin-top: 10px; font-size: 11px; line-height: 1.7; color: var(--app-text-muted); }
+/* 弹窗表单行：dialog 内容 append-to-body，样式必须放全局 style */
+.dialog-form-row { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.dialog-form-row > span { width: 110px; flex: none; font-size: 12px; color: var(--app-text-secondary); }
+.dialog-form-row .el-input { flex: 1; }
+.pay-account.unbound, .unbound-text { color: #b7791f; }
+.assign-info .mono, .mobile-worker-info .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; }
+.config-drawer .group-badge { display: inline-flex; align-items: center; padding: 4px 9px; border-radius: 7px; font-size: 11px; color: var(--app-accent-strong); background: var(--app-accent-soft); }
+.config-drawer .group-badge.ungrouped { color: var(--app-text-secondary); background: var(--app-bg-hover); }
+.config-drawer .copy-icon { font-size: 14px; color: var(--app-text-muted); cursor: pointer; }
+.config-drawer .copy-icon:hover { color: var(--app-accent-strong); }
+/* 人工充值单 · 支付宝余额扣除流水 */
+.manual-scope { margin-bottom: 12px; line-height: 1.7; }
+.manual-scope strong { color: var(--app-text-primary); }
+.manual-form-panel { margin-bottom: 16px; padding: 12px 14px; border: 1px solid var(--app-border); border-radius: 9px; background: var(--app-bg-subtle); }
+.manual-form-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; }
+.manual-form-head strong { font-size: 13px; color: var(--app-text-primary); }
+.manual-form-head span { font-size: 11px; color: var(--app-text-muted); }
+.manual-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 14px; }
+.manual-field { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.manual-field > span { width: 96px; flex: none; font-size: 12px; color: var(--app-text-secondary); }
+.manual-field-control { flex: 1; min-width: 0; }
+.manual-field-full { margin-top: 10px; }
+.manual-form-actions { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+.manual-form-tip { font-size: 11px; color: #b7791f; }
+.manual-result { margin-top: 10px; padding: 8px 10px; border-radius: 7px; font-size: 11px; line-height: 1.7; color: var(--app-text-secondary); background: var(--app-bg-hover); }
+.manual-result strong { color: var(--app-text-primary); }
+.manual-result .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; }
+.manual-sub-switch { display: flex; gap: 8px; margin-bottom: 12px; }
+.manual-sub-switch .el-button { margin-left: 0; }
+.manual-toolbar .el-input { width: 170px; }
+.manual-toolbar .el-select { width: 150px; }
+.manual-toolbar .manual-type-select { width: 140px; }
+.manual-date-range { width: 240px; }
+.manual-pagination { display: flex; align-items: center; justify-content: space-between; margin-top: 12px; font-size: 11px; color: var(--app-text-muted); }
+.amount-strong { font-weight: 600; color: var(--app-text-primary); }
+.amount-negative { font-weight: 600; color: var(--el-color-danger); }
+.balance-pair { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; font-size: 11px; color: var(--app-text-secondary); }
+.balance-arrow { color: var(--app-text-muted); }
+.balance-unknown-text { color: var(--app-text-muted); }
+@media(max-width:700px){
+  .config-toolbar .el-input{width:100%}
+  .config-toolbar .el-select{flex:1;min-width:120px}
+  .manual-form-grid{grid-template-columns:1fr}
+  .manual-field>span{width:86px}
+  .manual-date-range{width:100%}
+  .manual-pagination{flex-direction:column;align-items:flex-start;gap:8px}
 }
 </style>

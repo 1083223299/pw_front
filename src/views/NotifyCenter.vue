@@ -29,7 +29,7 @@
           <div class="item-head">
             <span v-if="!item.read" class="unread-dot" title="未读" />
             <strong class="item-title">{{ item.title }}</strong>
-            <span v-if="item.sceneLabel" class="scene-tag">{{ item.sceneLabel }}</span>
+            <span v-if="item.sceneLabel" class="scene-tag" :class="{ 'scene-danger': item.scene === 'ALIPAY_BALANCE', 'scene-warning': item.scene === 'ALIPAY_BALANCE_LOW' }">{{ item.sceneLabel }}</span>
             <span class="item-time">{{ relativeTime(item) }}</span>
           </div>
 
@@ -297,6 +297,10 @@ watch(() => route.query.id, (id) => {
   color: #d97706;
   background: rgba(217, 119, 6, 0.12);
 }
+
+/* 余额类通知按 scene 区分：预警橙、余额不足红（后者会拦单，更严重） */
+.scene-tag.scene-warning { color: #d97706; background: rgba(217, 119, 6, 0.12); }
+.scene-tag.scene-danger { color: var(--el-color-danger); background: rgba(220, 38, 38, 0.14); }
 
 .item-time {
   margin-left: auto;

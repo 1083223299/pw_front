@@ -28,6 +28,12 @@ const TYPE_MAP = {
   handover: NOTIFY_TYPE.HANDOVER
 };
 
+/** 后端未下发 sceneLabel 时兜底中文标签，避免通知列表直接显示原始枚举。 */
+const SCENE_LABELS = {
+  ALIPAY_BALANCE_LOW: '支付宝余额预警',
+  ALIPAY_BALANCE: '支付宝余额不足'
+};
+
 const BUBBLE_DURATION = 6000;
 const HEARTBEAT_INTERVAL = 25000;
 const MAX_RECONNECT_DELAY = 30000;
@@ -86,7 +92,7 @@ function normalize(raw = {}) {
     idText: String(id),
     type: normalizeType(raw.type || raw.orderScene),
     scene: raw.scene || raw.orderScene || '',
-    sceneLabel: raw.sceneLabel || raw.scene || '',
+    sceneLabel: raw.sceneLabel || SCENE_LABELS[raw.scene] || raw.scene || '',
     title: raw.title || '系统通知',
     content: raw.content || '',
     orderId: raw.orderId || raw.order_id || '',
